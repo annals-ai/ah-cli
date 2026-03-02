@@ -377,6 +377,8 @@ export class AgentSession implements DurableObject {
     this.capabilities = meta.capabilities || [];
     this.connectedAt = meta.connectedAt || '';
     this.lastHeartbeat = meta.lastHeartbeat || '';
+    // Restore epoch ms from ISO string — critical for alarm() heartbeat check after DO hibernation
+    this.lastHeartbeatTime = meta.lastHeartbeat ? new Date(meta.lastHeartbeat).getTime() : 0;
     this.activeSessions = meta.activeSessions ?? 0;
     this.cachedTokenHash = meta.tokenHash || '';
     this.cachedUserId = meta.userId || '';
