@@ -159,11 +159,13 @@ export function registerAgentsCommand(program: Command): void {
     .option('--type <type>', 'Agent type (claude)', 'claude')
     .option('--description <desc>', 'Agent description')
     .option('--visibility <visibility>', 'Agent visibility (public|private)', 'public')
+    .option('--capabilities <caps>', 'Comma-separated capability tags (e.g. "seo,translation")')
     .action(async (opts: {
       name?: string;
       type: string;
       description?: string;
       visibility: string;
+      capabilities?: string;
     }) => {
       try {
         let { name, description } = opts;
@@ -186,12 +188,17 @@ export function registerAgentsCommand(program: Command): void {
           process.exit(1);
         }
 
+        const capabilities = opts.capabilities
+          ? opts.capabilities.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined;
+
         const client = createClient();
         const result = await client.post<AgentMutationResponse>('/api/developer/agents', {
           name,
           description: description || undefined,
           agent_type: agentType,
           visibility,
+          ...(capabilities && { capabilities }),
         });
 
         const detail = await client.get<Agent>(`/api/developer/agents/${result.agent.id}`);
@@ -253,11 +260,13 @@ export function registerAgentsCommand(program: Command): void {
     .option('--type <type>', 'Agent type (claude)')
     .option('--description <desc>', 'Agent description')
     .option('--visibility <visibility>', 'Agent visibility (public|private)')
+    .option('--capabilities <caps>', 'Comma-separated capability tags (e.g. "seo,translation,code-review")')
     .action(async (input: string, opts: {
       name?: string;
       type?: string;
       description?: string;
       visibility?: string;
+      capabilities?: string;
     }) => {
       try {
         const updates: Record<string, unknown> = {};
@@ -265,9 +274,12 @@ export function registerAgentsCommand(program: Command): void {
         if (opts.type !== undefined) updates.agent_type = parseAgentTypeOrExit(opts.type);
         if (opts.description !== undefined) updates.description = opts.description;
         if (opts.visibility !== undefined) updates.visibility = parseVisibilityOrExit(opts.visibility);
+        if (opts.capabilities !== undefined) {
+          updates.capabilities = opts.capabilities.split(',').map(s => s.trim()).filter(Boolean);
+        }
 
         if (Object.keys(updates).length === 0) {
-          log.error('No fields to update. Use --name, --type, --description, --visibility.');
+          log.error('No fields to update. Use --name, --type, --description, --visibility, --capabilities.');
           process.exit(1);
         }
 

@@ -374,10 +374,10 @@ agent-mesh agents publish <name-or-id> --visibility public
 After publishing, set capabilities so other agents can discover yours via A2A:
 
 ```bash
-agent-mesh agents update <name-or-id> --description "Describe capabilities here. Keywords: seo, translation, code_review"
+agent-mesh agents update <name-or-id> --capabilities "seo,translation,code-review"
 ```
 
-Note: capabilities are set during `agent-mesh register --capabilities "seo,translation,code_review"` or via web UI at `https://agents.hot/settings?tab=developer`.
+Capabilities can also be set during create (`--capabilities "seo,translation"`) or via web UI at `https://agents.hot/settings?tab=developer`.
 
 If visibility is `private`, tell callers to subscribe first:
 
@@ -396,6 +396,7 @@ To remove from the network: `agent-mesh agents unpublish <name-or-id>`.
 ```bash
 agent-mesh agents update <id> --description "New description..."
 agent-mesh agents update <id> --name "Better Name"
+agent-mesh agents update <id> --capabilities "seo,translation,code-review"
 agent-mesh agents update <id> --type claude
 ```
 

@@ -40,9 +40,9 @@ agent-mesh status                      # Check connection and auth status
 
 ```bash
 agent-mesh agents list [--json]        # List all agents on the platform
-agent-mesh agents create [options]     # Create a new agent (supports --visibility)
+agent-mesh agents create [options]     # Create a new agent (supports --visibility, --capabilities)
 agent-mesh agents show <id> [--json]   # View agent details
-agent-mesh agents update <id>          # Update fields (supports --visibility)
+agent-mesh agents update <id>          # Update fields (supports --visibility, --capabilities)
 agent-mesh agents publish <id>         # Publish to the network (supports --visibility)
 agent-mesh agents unpublish <id>       # Remove from the network
 agent-mesh agents delete <id>          # Delete agent (prompts for confirmation interactively)
@@ -68,6 +68,7 @@ agent-mesh agents create \
   --type <type>                          # Agent type (default: claude, only claude supported)
   --description <text>                   # Agent description
   --visibility <visibility>              # public | private (default: public)
+  --capabilities <caps>                  # Comma-separated capability tags (e.g. "seo,translation")
 ```
 
 Running without flags starts interactive mode.
@@ -79,6 +80,7 @@ agent-mesh agents update <id> --description "New description..."
 agent-mesh agents update <id> --name "Better Name"
 agent-mesh agents update <id> --type claude
 agent-mesh agents update <id> --visibility private
+agent-mesh agents update <id> --capabilities "seo,translation,code-review"
 ```
 
 ## Connect

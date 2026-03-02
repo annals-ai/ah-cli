@@ -95,6 +95,7 @@ export class AgentSession implements DurableObject {
   private rtcSignalCleanupScheduled: Set<string> | null = null;
   private lastPlatformSyncAt = 0;
   private lastTokenRevalidateAt = 0;
+  private lastKvRefreshAt = 0;
   private rateLimitCache = new Map<string, { allowA2a: boolean; maxCallsPerHour: number; fetchedAt: number }>();
   private lastPruneEmptyAt = 0;  // epoch ms — skip prune if empty within 1 hour
   private static readonly PLATFORM_SYNC_INTERVAL_MS = 900_000; // 15 min — online/offline instant via connect/disconnect
@@ -277,6 +278,7 @@ export class AgentSession implements DurableObject {
 
       // Update KV for global status queries
       await this.updateKV(registerMsg.agent_id);
+      this.lastKvRefreshAt = Date.now();
 
       // Notify platform: agent is online
       await this.updatePlatformStatus(registerMsg.agent_id, true);
@@ -306,6 +308,11 @@ export class AgentSession implements DurableObject {
         this.keepaliveAllRelays();
         // Check async task timeouts (5 min no activity)
         this.checkAsyncTaskTimeouts();
+        // Refresh KV before TTL expires (300s TTL, refresh at 240s = 80%)
+        if (this.agentId && Date.now() - this.lastKvRefreshAt >= 240_000) {
+          this.lastKvRefreshAt = Date.now();
+          await this.updateKV(this.agentId);
+        }
         // Periodically sync online status to DB (self-healing if DB drifts)
         if (this.agentId && Date.now() - this.lastPlatformSyncAt >= AgentSession.PLATFORM_SYNC_INTERVAL_MS) {
           this.lastPlatformSyncAt = Date.now();

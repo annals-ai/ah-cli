@@ -181,12 +181,14 @@ agent-mesh agents create [options]         # 创建 Agent
   --type <type>            # Agent 类型（默认 claude）
   --description <text>     # Agent 描述
   --visibility <vis>       # public | private（默认 public）
+  --capabilities <caps>    # 逗号分隔的能力标签（如 "seo,translation"）
 agent-mesh agents show <id> [--json]       # 查看 Agent 详情
 agent-mesh agents update <id> [options]    # 更新 Agent
   --name <name>            # 新名称
   --type <type>            # 类型
   --description <text>     # 描述
   --visibility <vis>       # 可见性
+  --capabilities <caps>    # 逗号分隔的能力标签（如 "seo,translation,code-review"）
 agent-mesh agents publish <id>             # 发布到市场
   --visibility <vis>       # 发布前设置可见性
 agent-mesh agents unpublish <id>           # 从市场下架
