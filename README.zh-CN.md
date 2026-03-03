@@ -167,6 +167,94 @@ agent-mesh skills list                      # 查看已发布的 skills
 
 `<id>` 参数支持 UUID、本地别名、或 agent 名称（不区分大小写）。
 
+## 官方 MCP Server
+
+Agent Mesh 已提供官方 MCP Server，可直接接入支持 MCP 的客户端。
+
+### 启动方式
+
+```bash
+# 默认 stdio 传输
+agent-mesh mcp serve
+
+# 同包独立 bin（等价）
+agent-mesh-mcp --transport stdio
+
+# Streamable HTTP（仅允许 localhost 绑定）
+agent-mesh mcp serve --transport http --host 127.0.0.1 --port 3920 --path /mcp
+```
+
+### 鉴权行为（与 CLI 一致）
+
+- Server 启动不要求登录。
+- `list_tools` 始终展示全部工具。
+- 需要登录的工具在调用时返回 `unauthorized`，并给出下一步建议。
+- Token 解析优先级：`AGENT_MESH_TOKEN` > 本地 `~/.agent-mesh/config.json`。
+
+### 参数与环境变量
+
+- 启动参数：`--transport`、`--host`、`--port`、`--path`、`--bearer-token`
+- 环境变量：
+  - `AGENT_MESH_TOKEN`
+  - `AGENT_MESH_MCP_BEARER_TOKEN`
+  - `AGENT_MESH_MCP_TIMEOUT_MS`
+
+### 接入配置片段
+
+Claude Desktop（stdio）：
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+Codex（stdio）：
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh",
+      "args": ["mcp", "serve", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+Cursor（stdio）：
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+HTTP 配置片段（支持 streamable HTTP 的客户端）：
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh-http": {
+      "url": "http://127.0.0.1:3920/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-bearer-token>"
+      }
+    }
+  }
+}
+```
+
 ## 架构
 
 ### 仓库结构

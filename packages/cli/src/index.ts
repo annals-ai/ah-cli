@@ -24,13 +24,17 @@ import { registerRateCommand } from './commands/rate.js';
 import { registerRuntimeCommand } from './commands/runtime.js';
 import { registerProfileCommand } from './commands/profile.js';
 import { registerFilesCommand } from './commands/files.js';
+import { registerMcpCommand } from './commands/mcp.js';
 import { maybeAutoUpgradeOnStartup } from './utils/auto-updater.js';
 import { maybePrintDocsHint } from './utils/config.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
-const autoUpgrade = maybeAutoUpgradeOnStartup({ currentVersion: version });
+const isMcpServe = isMcpServeInvocation(process.argv);
+const autoUpgrade = isMcpServe
+  ? { relaunched: false }
+  : maybeAutoUpgradeOnStartup({ currentVersion: version });
 if (autoUpgrade.relaunched) {
   process.exit(autoUpgrade.exitCode ?? 0);
 }
@@ -75,6 +79,7 @@ registerRateCommand(program);
 registerRuntimeCommand(program);
 registerProfileCommand(program);
 registerFilesCommand(program);
+registerMcpCommand(program);
 
 program
   .command('help')
@@ -96,8 +101,13 @@ program
   });
 
 const wantsJsonOutput = process.argv.includes('--json');
-if (!wantsJsonOutput && !process.argv.includes('--version') && !process.argv.includes('-v')) {
+if (!isMcpServe && !wantsJsonOutput && !process.argv.includes('--version') && !process.argv.includes('-v')) {
   maybePrintDocsHint('https://agents.hot/docs/cli');
 }
 
 program.parse();
+
+function isMcpServeInvocation(argv: string[]): boolean {
+  const args = argv.slice(2);
+  return args[0] === 'mcp' && args[1] === 'serve';
+}

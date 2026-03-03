@@ -1,0 +1,42 @@
+<evaluation>
+  <qa_pair>
+    <question>Initialize the MCP server, then read the server implementation name from the initialize result. What is the exact server name string?</question>
+    <answer>agent-mesh-mcp-server</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>List all tools and identify the shared naming prefix used by every tool name. What is the exact prefix including trailing underscore?</question>
+    <answer>agent_mesh_</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools, find the tool used for long-tail CLI coverage. What is its exact tool name?</question>
+    <answer>agent_mesh_cli_passthrough</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools metadata, what is the exact value of readOnlyHint for tool agent_mesh_discover_agents? Respond with lowercase true or false.</question>
+    <answer>true</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools metadata, what is the exact value of destructiveHint for tool agent_mesh_agents_delete? Respond with lowercase true or false.</question>
+    <answer>true</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools metadata, what is the exact value of idempotentHint for tool agent_mesh_connect_setup? Respond with lowercase true or false.</question>
+    <answer>false</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools metadata, what is the exact value of openWorldHint for tool agent_mesh_list_local_agents? Respond with lowercase true or false.</question>
+    <answer>false</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Call tool agent_mesh_cli_passthrough with args=["logs"]. The call must fail fast. What exact structuredContent.error.code value is returned?</question>
+    <answer>unsupported_interactive_command</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Call tool agent_mesh_cli_passthrough with args=["mcp","serve"]. What exact structuredContent.error.code value is returned?</question>
+    <answer>unsupported_interactive_command</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>From list_tools, inspect the output schema of any tool and identify the field that explicitly indicates authentication requirement on failures. What is the exact field name?</question>
+    <answer>auth_required</answer>
+  </qa_pair>
+</evaluation>

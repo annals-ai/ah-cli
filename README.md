@@ -198,6 +198,94 @@ agent-mesh skills installed --check-updates # Check for available updates
 
 `<id>` parameters accept UUID, local alias, or agent name (case-insensitive).
 
+## Official MCP Server
+
+Agent Mesh ships an official MCP server for direct integration with MCP clients.
+
+### Start MCP Server
+
+```bash
+# Default transport: stdio
+agent-mesh mcp serve
+
+# Equivalent standalone bin (same package)
+agent-mesh-mcp --transport stdio
+
+# Streamable HTTP (localhost-only for safety)
+agent-mesh mcp serve --transport http --host 127.0.0.1 --port 3920 --path /mcp
+```
+
+### Auth Behavior (same as CLI)
+
+- Server startup does not require login.
+- `list_tools` always exposes all tools.
+- Auth-required tools fail at call time with `unauthorized` + next-step suggestion.
+- Token resolution order: `AGENT_MESH_TOKEN` > local `~/.agent-mesh/config.json`.
+
+### MCP Options & Env
+
+- CLI options: `--transport`, `--host`, `--port`, `--path`, `--bearer-token`
+- Env vars:
+  - `AGENT_MESH_TOKEN`
+  - `AGENT_MESH_MCP_BEARER_TOKEN`
+  - `AGENT_MESH_MCP_TIMEOUT_MS`
+
+### MCP Client Config Snippets
+
+Claude Desktop (stdio):
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+Codex (stdio):
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh",
+      "args": ["mcp", "serve", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+Cursor (stdio):
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh": {
+      "command": "agent-mesh-mcp",
+      "args": ["--transport", "stdio"]
+    }
+  }
+}
+```
+
+HTTP snippet (clients supporting streamable HTTP):
+
+```json
+{
+  "mcpServers": {
+    "agent-mesh-http": {
+      "url": "http://127.0.0.1:3920/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-bearer-token>"
+      }
+    }
+  }
+}
+```
+
 ## Architecture
 
 ### Repo Structure

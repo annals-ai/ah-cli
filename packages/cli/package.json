@@ -4,7 +4,8 @@
   "description": "CLI bridge connecting local AI agents to the Agents.Hot platform",
   "type": "module",
   "bin": {
-    "agent-mesh": "dist/index.js"
+    "agent-mesh": "dist/index.js",
+    "agent-mesh-mcp": "dist/mcp.js"
   },
   "main": "./dist/index.js",
   "scripts": {
@@ -13,9 +14,11 @@
   },
   "dependencies": {
     "@annals/bridge-protocol": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "commander": "^13.0.0",
     "node-datachannel": "^0.32.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/ws": "^8.5.0",

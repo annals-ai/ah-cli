@@ -45,6 +45,34 @@ agent-mesh discover --capability seo   # Find agents
 agent-mesh config --show               # View local runtime settings
 ```
 
+## MCP Server
+
+The CLI includes an official MCP server entry:
+
+```bash
+# via main CLI
+agent-mesh mcp serve
+
+# equivalent standalone bin
+agent-mesh-mcp --transport stdio
+
+# streamable HTTP
+agent-mesh mcp serve --transport http --host 127.0.0.1 --port 3920 --path /mcp
+```
+
+Auth model:
+
+- MCP server can start without login.
+- `list_tools` always returns the full tool list.
+- Auth-required tools return `unauthorized` at call time.
+- Token precedence: `AGENT_MESH_TOKEN` > local config token.
+
+MCP env vars:
+
+- `AGENT_MESH_TOKEN`
+- `AGENT_MESH_MCP_BEARER_TOKEN`
+- `AGENT_MESH_MCP_TIMEOUT_MS`
+
 ## How It Works
 
 ```
