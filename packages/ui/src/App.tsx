@@ -1,10 +1,16 @@
 import { startTransition, useEffect, useState } from 'react';
 import {
   archiveSession,
+  createAgent,
+  exposeAgent,
   forkSession,
   getDashboardData,
   getSessionMessages,
+  removeAgent,
   stopSession,
+  unexposeAgent,
+  updateAgent,
+  type AgentMutationInput,
   type DashboardData,
   type SessionMessage,
   type SessionStatus,
@@ -168,6 +174,31 @@ export default function App() {
     }
   }
 
+  async function handleCreateAgent(input: AgentMutationInput): Promise<void> {
+    await createAgent(input);
+    await refreshDashboard(selectedSessionId);
+  }
+
+  async function handleUpdateAgent(ref: string, input: Partial<AgentMutationInput>): Promise<void> {
+    await updateAgent(ref, input);
+    await refreshDashboard(selectedSessionId);
+  }
+
+  async function handleRemoveAgent(ref: string): Promise<void> {
+    await removeAgent(ref);
+    await refreshDashboard(selectedSessionId);
+  }
+
+  async function handleExposeAgent(ref: string, provider: string, config: Record<string, unknown>): Promise<void> {
+    await exposeAgent(ref, provider, config);
+    await refreshDashboard(selectedSessionId);
+  }
+
+  async function handleUnexposeAgent(ref: string, provider: string): Promise<void> {
+    await unexposeAgent(ref, provider);
+    await refreshDashboard(selectedSessionId);
+  }
+
   return (
     <AppShell
       uiBaseUrl={dashboard?.status.daemon.uiBaseUrl ?? null}
@@ -204,10 +235,16 @@ export default function App() {
           <div className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
             <AgentsPanel
               agents={dashboard.agents}
+              providerOptions={dashboard.providerCatalog}
               selectedAgentId={filters.agentId}
+              onCreateAgent={handleCreateAgent}
+              onExposeAgent={handleExposeAgent}
+              onRemoveAgent={handleRemoveAgent}
               onSelectAgent={(agentId) => {
                 setFilters((current) => ({ ...current, agentId }));
               }}
+              onUnexposeAgent={handleUnexposeAgent}
+              onUpdateAgent={handleUpdateAgent}
             />
 
             <SessionsPanel

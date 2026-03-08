@@ -36,6 +36,17 @@ export interface AgentRecord {
   sessionCount: number;
 }
 
+export interface AgentMutationInput {
+  slug?: string;
+  name: string;
+  runtimeType: string;
+  projectPath: string;
+  sandbox: boolean;
+  description: string;
+  capabilities: string[];
+  visibility: 'public' | 'private' | 'unlisted';
+}
+
 export interface SessionRecord {
   id: string;
   agentId: string;
@@ -113,6 +124,7 @@ export interface DaemonStatusResponse {
 export interface DashboardData {
   status: DaemonStatusResponse;
   agents: AgentRecord[];
+  providerCatalog: string[];
   sessions: SessionRecord[];
   tasks: TaskRecord[];
   providers: ProviderRecord[];
@@ -149,9 +161,10 @@ async function postJson<T>(path: string, body: Record<string, unknown>): Promise
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [status, agents, sessions, tasks, providers, logs] = await Promise.all([
+  const [status, agents, providerCatalog, sessions, tasks, providers, logs] = await Promise.all([
     fetchJson<DaemonStatusResponse>('/api/daemon/status'),
     fetchJson<{ items: AgentRecord[] }>('/api/agents'),
+    fetchJson<{ items: string[] }>('/api/providers/catalog'),
     fetchJson<{ items: SessionRecord[] }>('/api/sessions'),
     fetchJson<{ items: TaskRecord[] }>('/api/tasks'),
     fetchJson<{ items: ProviderRecord[] }>('/api/providers'),
@@ -161,6 +174,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   return {
     status,
     agents: agents.items,
+    providerCatalog: providerCatalog.items,
     sessions: sessions.items,
     tasks: tasks.items,
     providers: providers.items,
@@ -187,5 +201,39 @@ export async function archiveSession(sessionId: string): Promise<SessionRecord> 
 export async function forkSession(sessionId: string, title?: string): Promise<{ session: SessionRecord; messages: SessionMessage[] }> {
   return postJson<{ session: SessionRecord; messages: SessionMessage[] }>(`/api/sessions/${sessionId}/fork`, {
     title,
+  });
+}
+
+export async function createAgent(input: AgentMutationInput): Promise<AgentRecord> {
+  const response = await postJson<{ agent: AgentRecord }>('/api/agents', input);
+  return response.agent;
+}
+
+export async function updateAgent(ref: string, input: Partial<AgentMutationInput>): Promise<AgentRecord> {
+  const response = await postJson<{ agent: AgentRecord }>(`/api/agents/${ref}/update`, input);
+  return response.agent;
+}
+
+export async function removeAgent(ref: string): Promise<{ ok: boolean; agentId: string }> {
+  return postJson<{ ok: boolean; agentId: string }>(`/api/agents/${ref}/remove`, {});
+}
+
+export async function exposeAgent(
+  ref: string,
+  provider: string,
+  config: Record<string, unknown>,
+): Promise<{ agent: AgentRecord; binding: ProviderBinding }> {
+  return postJson<{ agent: AgentRecord; binding: ProviderBinding }>(`/api/agents/${ref}/expose`, {
+    provider,
+    config,
+  });
+}
+
+export async function unexposeAgent(
+  ref: string,
+  provider: string,
+): Promise<{ agent: AgentRecord; binding: ProviderBinding }> {
+  return postJson<{ agent: AgentRecord; binding: ProviderBinding }>(`/api/agents/${ref}/unexpose`, {
+    provider,
   });
 }
