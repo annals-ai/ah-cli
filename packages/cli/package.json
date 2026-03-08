@@ -7,6 +7,9 @@
     "agent-mesh": "dist/index.js"
   },
   "main": "./dist/index.js",
+  "engines": {
+    "node": ">=25"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch"
