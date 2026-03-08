@@ -121,4 +121,63 @@ describe('AgentMeshDaemonServer UI API', () => {
     expect(fork.session.parentSessionId).toBe(session.id);
     expect(fork.session.title).toBe('Experiment');
   });
+
+  it('creates, updates, removes, and exposes agents through the ui api', async () => {
+    server = new AgentMeshDaemonServer({ dbPath, uiPort: 0 });
+    const address = await server.listenForTest();
+
+    const providerCatalog = await fetchJson<{ items: string[] }>(`${address.uiBaseUrl}/api/providers/catalog`);
+    expect(providerCatalog.items).toContain('generic-a2a');
+
+    const created = await postJson<{ agent: { id: string; slug: string; visibility: string } }>(
+      `${address.uiBaseUrl}/api/agents`,
+      {
+        name: 'Monitor Agent',
+        projectPath: '/tmp/monitor-agent',
+        visibility: 'public',
+        capabilities: ['monitoring', 'ops'],
+      },
+    );
+
+    const updated = await postJson<{ agent: { name: string; sandbox: boolean } }>(
+      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/update`,
+      {
+        name: 'Updated Monitor Agent',
+        sandbox: true,
+      },
+    );
+
+    const exposed = await postJson<{ binding: { provider: string; status: string } }>(
+      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/expose`,
+      {
+        provider: 'generic-a2a',
+        config: {},
+      },
+    );
+
+    const unexposed = await postJson<{ binding: { provider: string; status: string } }>(
+      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/unexpose`,
+      {
+        provider: 'generic-a2a',
+      },
+    );
+
+    const removed = await postJson<{ ok: boolean; agentId: string }>(
+      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/remove`,
+      {},
+    );
+
+    const agents = await fetchJson<{ items: Array<{ id: string }> }>(`${address.uiBaseUrl}/api/agents`);
+
+    expect(created.agent.visibility).toBe('public');
+    expect(updated.agent).toMatchObject({
+      name: 'Updated Monitor Agent',
+      sandbox: true,
+    });
+    expect(exposed.binding.provider).toBe('generic-a2a');
+    expect(['configured', 'online']).toContain(exposed.binding.status);
+    expect(unexposed.binding.status).toBe('inactive');
+    expect(removed.ok).toBe(true);
+    expect(agents.items.find((agent) => agent.id === removed.agentId)).toBeUndefined();
+  });
 });

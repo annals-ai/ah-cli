@@ -10,8 +10,15 @@ import {
   getDaemonUiHost,
 } from './paths.js';
 import { DaemonStore } from './store.js';
+import {
+  createManagedAgent,
+  exposeManagedAgent,
+  removeManagedAgent,
+  unexposeManagedAgent,
+  updateManagedAgent,
+} from './agent-management.js';
 import type { DaemonEnvelope, DaemonRequest } from './protocol.js';
-import { getProvider, shutdownProviders } from '../providers/index.js';
+import { shutdownProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
 import { createUiApiHandler } from '../ui/api-routes.js';
 import { startUiHttpServer, type UiHttpServerHandle } from '../ui/http-server.js';
@@ -292,7 +299,7 @@ export class AgentMeshDaemonServer {
       }
 
       case 'agent.add': {
-        const agent = this.store.createAgent({
+        const agent = createManagedAgent({ store: this.store, runtime: this.runtime }, {
           name: expectString(request.params?.name, 'name'),
           slug: typeof request.params?.slug === 'string' ? request.params.slug : undefined,
           runtimeType: typeof request.params?.runtimeType === 'string' ? request.params.runtimeType : 'claude',
@@ -311,9 +318,7 @@ export class AgentMeshDaemonServer {
 
       case 'agent.update': {
         const ref = expectString(request.params?.ref, 'ref');
-        const current = this.store.resolveAgentRef(ref);
-        if (!current) throw new Error(`Local agent not found: ${ref}`);
-        const agent = this.store.updateAgent(current.id, {
+        const agent = await updateManagedAgent({ store: this.store, runtime: this.runtime }, ref, {
           slug: typeof request.params?.slug === 'string' ? request.params.slug : undefined,
           name: typeof request.params?.name === 'string' ? request.params.name : undefined,
           runtimeType: typeof request.params?.runtimeType === 'string' ? request.params.runtimeType : undefined,
@@ -327,94 +332,31 @@ export class AgentMeshDaemonServer {
             ? request.params.visibility as 'public' | 'private' | 'unlisted'
             : undefined,
         });
-        for (const binding of this.store.listProviderBindings(agent.id)) {
-          if (binding.status === 'inactive') continue;
-          const provider = getProvider(binding.provider);
-          await provider.startIngress({ agent, binding, store: this.store, runtime: this.runtime });
-        }
         return { agent };
       }
 
       case 'agent.remove': {
         const ref = expectString(request.params?.ref, 'ref');
-        const agent = this.store.resolveAgentRef(ref);
-        if (!agent) throw new Error(`Local agent not found: ${ref}`);
-        for (const binding of this.store.listProviderBindings(agent.id)) {
-          const provider = getProvider(binding.provider);
-          await provider.stopIngress({ agent, binding, store: this.store, runtime: this.runtime });
-        }
-        this.store.removeAgent(agent.id);
-        return { ok: true, agentId: agent.id };
+        return removeManagedAgent({ store: this.store, runtime: this.runtime }, ref);
       }
 
       case 'agent.expose': {
         const ref = expectString(request.params?.ref, 'ref');
         const providerName = expectString(request.params?.provider, 'provider');
-        const agent = this.store.resolveAgentRef(ref);
-        if (!agent) throw new Error(`Local agent not found: ${ref}`);
-        const provider = getProvider(providerName);
-        const current = this.store.getProviderBinding(agent.id, providerName);
-        const result = current
-          ? await provider.updateAgent({ agent, binding: current, store: this.store })
-          : await provider.registerAgent({ agent, binding: current, store: this.store });
-
-        const binding = this.store.upsertProviderBinding({
-          agentId: agent.id,
-          provider: providerName,
-          remoteAgentId: result.remoteAgentId ?? current?.remoteAgentId ?? null,
-          remoteSlug: result.remoteSlug ?? current?.remoteSlug ?? null,
-          status: result.status,
-          config: {
-            ...(current?.config ?? {}),
-            ...(typeof request.params?.config === 'object' && request.params?.config
-              ? request.params.config as Record<string, unknown>
-              : {}),
-            ...(result.config ?? {}),
-          },
-          lastSyncedAt: result.lastSyncedAt ?? new Date().toISOString(),
-        });
-
-        try {
-          await provider.startIngress({ agent, binding, store: this.store, runtime: this.runtime });
-        } catch (error) {
-          const failed = this.store.upsertProviderBinding({
-            agentId: agent.id,
-            provider: providerName,
-            remoteAgentId: binding.remoteAgentId,
-            remoteSlug: binding.remoteSlug,
-            status: 'error',
-            config: binding.config,
-            lastSyncedAt: new Date().toISOString(),
-          });
-          throw new Error(`${(error as Error).message} (binding status: ${failed.status})`);
-        }
-
-        return {
-          agent,
-          binding: this.store.getProviderBinding(agent.id, providerName) ?? binding,
-        };
+        return exposeManagedAgent(
+          { store: this.store, runtime: this.runtime },
+          ref,
+          providerName,
+          typeof request.params?.config === 'object' && request.params?.config
+            ? request.params.config as Record<string, unknown>
+            : {},
+        );
       }
 
       case 'agent.unexpose': {
         const ref = expectString(request.params?.ref, 'ref');
         const providerName = expectString(request.params?.provider, 'provider');
-        const agent = this.store.resolveAgentRef(ref);
-        if (!agent) throw new Error(`Local agent not found: ${ref}`);
-        const binding = this.store.getProviderBinding(agent.id, providerName);
-        if (!binding) throw new Error(`Provider binding not found: ${providerName}`);
-        const provider = getProvider(providerName);
-        await provider.stopIngress({ agent, binding, store: this.store, runtime: this.runtime });
-        await provider.unregisterAgent({ agent, binding, store: this.store });
-        const nextBinding = this.store.upsertProviderBinding({
-          agentId: agent.id,
-          provider: providerName,
-          remoteAgentId: binding.remoteAgentId,
-          remoteSlug: binding.remoteSlug,
-          status: 'inactive',
-          config: binding.config,
-          lastSyncedAt: new Date().toISOString(),
-        });
-        return { agent, binding: nextBinding };
+        return unexposeManagedAgent({ store: this.store, runtime: this.runtime }, ref, providerName);
       }
 
       case 'task.create': {

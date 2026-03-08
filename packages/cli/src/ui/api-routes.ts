@@ -1,4 +1,12 @@
 import { readFileSync } from 'node:fs';
+import {
+  createManagedAgent,
+  exposeManagedAgent,
+  getProviderCatalog,
+  removeManagedAgent,
+  unexposeManagedAgent,
+  updateManagedAgent,
+} from '../daemon/agent-management.js';
 import { getDaemonLogPath } from '../daemon/paths.js';
 import type { DaemonRuntime } from '../daemon/runtime.js';
 import type { DaemonStore } from '../daemon/store.js';
@@ -21,6 +29,13 @@ function writeJson(response: Parameters<UiHttpRequestHandler>[0]['response'], st
 
 function splitPath(pathname: string): string[] {
   return pathname.split('/').filter(Boolean);
+}
+
+function expectNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${field} is required`);
+  }
+  return value.trim();
 }
 
 function clampLineCount(value: string | null): number {
@@ -128,6 +143,100 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         writeJson(response, 200, {
           session: serializeSession(snapshot.session, options.store.getAgentById(snapshot.session.agentId)),
           messages: snapshot.messages,
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'agents') {
+        const body = await readJsonBody(request);
+        const agent = createManagedAgent({ store: options.store, runtime: options.runtime }, {
+          name: expectNonEmptyString(body.name, 'name'),
+          slug: typeof body.slug === 'string' ? body.slug : undefined,
+          runtimeType: typeof body.runtimeType === 'string' ? body.runtimeType : 'claude',
+          projectPath: expectNonEmptyString(body.projectPath, 'projectPath'),
+          sandbox: body.sandbox === true,
+          description: typeof body.description === 'string' ? body.description : null,
+          capabilities: Array.isArray(body.capabilities) ? body.capabilities.map((item) => String(item)) : [],
+          visibility: typeof body.visibility === 'string'
+            ? body.visibility as 'public' | 'private' | 'unlisted'
+            : 'private',
+        });
+        writeJson(response, 200, {
+          agent: serializeAgent(
+            agent,
+            options.store.listProviderBindings(agent.id),
+            options.store.getSessionCountsByAgent()[agent.id] ?? 0,
+          ),
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'agents' && segments[3] === 'update') {
+        const body = await readJsonBody(request);
+        const agent = await updateManagedAgent({ store: options.store, runtime: options.runtime }, segments[2]!, {
+          slug: typeof body.slug === 'string' ? body.slug : undefined,
+          name: typeof body.name === 'string' ? body.name : undefined,
+          runtimeType: typeof body.runtimeType === 'string' ? body.runtimeType : undefined,
+          projectPath: typeof body.projectPath === 'string' ? body.projectPath : undefined,
+          sandbox: typeof body.sandbox === 'boolean' ? body.sandbox : undefined,
+          description: typeof body.description === 'string' ? body.description : undefined,
+          capabilities: Array.isArray(body.capabilities) ? body.capabilities.map((item) => String(item)) : undefined,
+          visibility: typeof body.visibility === 'string'
+            ? body.visibility as 'public' | 'private' | 'unlisted'
+            : undefined,
+        });
+        writeJson(response, 200, {
+          agent: serializeAgent(
+            agent,
+            options.store.listProviderBindings(agent.id),
+            options.store.getSessionCountsByAgent()[agent.id] ?? 0,
+          ),
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'agents' && segments[3] === 'remove') {
+        writeJson(
+          response,
+          200,
+          await removeManagedAgent({ store: options.store, runtime: options.runtime }, segments[2]!),
+        );
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'agents' && segments[3] === 'expose') {
+        const body = await readJsonBody(request);
+        const result = await exposeManagedAgent(
+          { store: options.store, runtime: options.runtime },
+          segments[2]!,
+          expectNonEmptyString(body.provider, 'provider'),
+          typeof body.config === 'object' && body.config ? body.config as Record<string, unknown> : {},
+        );
+        writeJson(response, 200, {
+          agent: serializeAgent(
+            result.agent,
+            options.store.listProviderBindings(result.agent.id),
+            options.store.getSessionCountsByAgent()[result.agent.id] ?? 0,
+          ),
+          binding: result.binding,
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'agents' && segments[3] === 'unexpose') {
+        const body = await readJsonBody(request);
+        const result = await unexposeManagedAgent(
+          { store: options.store, runtime: options.runtime },
+          segments[2]!,
+          expectNonEmptyString(body.provider, 'provider'),
+        );
+        writeJson(response, 200, {
+          agent: serializeAgent(
+            result.agent,
+            options.store.listProviderBindings(result.agent.id),
+            options.store.getSessionCountsByAgent()[result.agent.id] ?? 0,
+          ),
+          binding: result.binding,
         });
         return true;
       }
@@ -262,6 +371,11 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           agent: options.store.getAgentById(binding.agentId),
         }));
         writeJson(response, 200, { items });
+        return true;
+      }
+
+      if (segments.length === 3 && segments[1] === 'providers' && segments[2] === 'catalog') {
+        writeJson(response, 200, { items: getProviderCatalog() });
         return true;
       }
 
