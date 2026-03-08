@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentMeshDaemonServer } from '../../packages/cli/src/daemon/server.js';
+import { DaemonStore } from '../../packages/cli/src/daemon/store.js';
 
 async function postJson<T>(url: string, body: Record<string, unknown>): Promise<{ status: number; data: T }> {
   const response = await fetch(url, {
@@ -17,6 +19,24 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
     status: response.status,
     data: await response.json() as T,
   };
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
 }
 
 describe('AgentMeshDaemonServer UI', () => {
@@ -84,5 +104,18 @@ describe('AgentMeshDaemonServer UI', () => {
     });
     expect(stopHook).toHaveBeenCalledTimes(1);
     expect(restartHook).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the persisted ui port when the daemon starts again', async () => {
+    const dbPath = join(tempDir, 'state.db');
+    const preferredPort = await getFreePort();
+    const store = new DaemonStore(dbPath);
+    store.setDaemonSetting('ui.last_port', { value: preferredPort });
+    store.close();
+
+    server = new AgentMeshDaemonServer({ dbPath });
+    const address = await server.listenForTest();
+
+    expect(address.uiPort).toBe(preferredPort);
   });
 });

@@ -85,10 +85,10 @@ export class AgentMeshDaemonServer {
 
   constructor(options: AgentMeshDaemonServerOptions = {}) {
     this.dbPath = options.dbPath ?? getDaemonDbPath();
-    this.preferredUiHost = options.uiHost ?? getDaemonUiHost();
-    this.preferredUiPort = options.uiPort ?? getDaemonUiDefaultPort();
     this.uiControlHooks = options.uiControlHooks;
     this.store = new DaemonStore(this.dbPath);
+    this.preferredUiHost = options.uiHost ?? getDaemonUiHost();
+    this.preferredUiPort = options.uiPort ?? this.getPersistedUiPort() ?? getDaemonUiDefaultPort();
     this.runtime = new DaemonRuntime(this.store);
   }
 
@@ -119,6 +119,21 @@ export class AgentMeshDaemonServer {
 
   private getTestSocketPath(): string {
     return join(dirname(this.dbPath), 'daemon.sock');
+  }
+
+  private getPersistedUiPort(): number | null {
+    const setting = this.store.getDaemonSetting<{ value?: unknown } | number>('ui.last_port');
+    const candidate = typeof setting === 'number'
+      ? setting
+      : typeof setting?.value === 'number'
+        ? setting.value
+        : null;
+
+    if (!Number.isFinite(candidate) || candidate === null) {
+      return null;
+    }
+
+    return Math.max(0, Math.trunc(candidate));
   }
 
   private async start(socketPath: string, registerSignalHandlers: boolean): Promise<void> {
