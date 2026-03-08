@@ -87,6 +87,12 @@ export interface RuntimeLimitRecord {
   updatedAt: string;
 }
 
+export interface DaemonSettingRecord<T = unknown> {
+  key: string;
+  value: T;
+  updatedAt: string;
+}
+
 export interface CreateAgentInput {
   slug?: string;
   name: string;

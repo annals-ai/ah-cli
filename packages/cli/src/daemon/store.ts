@@ -9,6 +9,7 @@ import type {
   CreateAgentInput,
   CreateSessionInput,
   CreateTaskGroupInput,
+  DaemonSettingRecord,
   DaemonAgent,
   ForkSessionInput,
   ProviderBinding,
@@ -193,6 +194,12 @@ export class DaemonStore {
         PRIMARY KEY (scope_type, scope_id)
       );
 
+      CREATE TABLE IF NOT EXISTS daemon_settings (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS checkpoints (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
@@ -316,6 +323,14 @@ export class DaemonStore {
       queueMaxLength: row.queue_max_length === null ? null : Number(row.queue_max_length),
       metadata: parseJson<Record<string, unknown>>(row.metadata_json as string, {}),
       createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  private mapDaemonSetting(row: Record<string, unknown>): DaemonSettingRecord {
+    return {
+      key: String(row.key),
+      value: parseJson<unknown>(row.value_json as string, null),
       updatedAt: String(row.updated_at),
     };
   }
@@ -774,5 +789,33 @@ export class DaemonStore {
     }
 
     return this.mapRuntimeLimit(row);
+  }
+
+  getDaemonSetting<T = unknown>(key: string): T | null {
+    const row = this.db.prepare(`
+      SELECT * FROM daemon_settings WHERE key = ?
+    `).get(key) as Record<string, unknown> | undefined;
+
+    if (!row) return null;
+    return this.mapDaemonSetting(row).value as T;
+  }
+
+  setDaemonSetting<T>(key: string, value: T): T {
+    this.db.prepare(`
+      INSERT INTO daemon_settings (key, value_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = excluded.updated_at
+    `).run(key, JSON.stringify(value), nowIso());
+
+    return this.getDaemonSetting<T>(key)!;
+  }
+
+  deleteDaemonSetting(key: string): boolean {
+    const result = this.db.prepare(`
+      DELETE FROM daemon_settings WHERE key = ?
+    `).run(key);
+    return Number(result.changes ?? 0) > 0;
   }
 }

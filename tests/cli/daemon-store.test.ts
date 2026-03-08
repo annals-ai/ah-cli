@@ -142,6 +142,12 @@ describe('DaemonStore', () => {
     expect(updated.status).toBe('inactive');
     expect(updated.config).toEqual({ public: false });
   });
+
+  it('stores daemon settings for ui launch state', () => {
+    store.setDaemonSetting('ui.first_open_completed', { value: true });
+
+    expect(store.getDaemonSetting('ui.first_open_completed')).toEqual({ value: true });
+  });
 });
 
 describe('buildPromptFromHistory', () => {
