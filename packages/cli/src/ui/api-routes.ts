@@ -198,6 +198,35 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         return true;
       }
 
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'tasks') {
+        const body = await readJsonBody(request);
+        const taskGroup = options.store.createTaskGroup({
+          title: expectNonEmptyString(body.title, 'title'),
+          ownerPrincipal: typeof body.ownerPrincipal === 'string' ? body.ownerPrincipal : 'owner:local',
+          source: typeof body.source === 'string' ? body.source : 'ui',
+          status: typeof body.status === 'string' ? body.status : 'active',
+          metadata: typeof body.metadata === 'object' && body.metadata ? body.metadata as Record<string, unknown> : {},
+        });
+        writeJson(response, 200, {
+          taskGroup: serializeTaskGroup(
+            taskGroup,
+            options.store.getSessionCountsByTaskGroup()[taskGroup.id] ?? 0,
+          ),
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'tasks' && segments[3] === 'archive') {
+        const taskGroup = options.store.archiveTaskGroup(segments[2]!);
+        writeJson(response, 200, {
+          taskGroup: serializeTaskGroup(
+            taskGroup,
+            options.store.getSessionCountsByTaskGroup()[taskGroup.id] ?? 0,
+          ),
+        });
+        return true;
+      }
+
       if (method === 'POST' && segments.length === 2 && segments[1] === 'agents') {
         const body = await readJsonBody(request);
         const agent = createManagedAgent({ store: options.store, runtime: options.runtime }, {

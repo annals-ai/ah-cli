@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   archiveSession,
+  archiveTaskGroup,
   createAgent,
+  createTaskGroup,
   exposeAgent,
   forkSession,
   getDashboardData,
@@ -202,6 +204,16 @@ export default function App() {
     await refreshDashboard(selectedSessionId);
   }
 
+  async function handleCreateTask(title: string, source: string): Promise<void> {
+    await createTaskGroup({ title, source });
+    await refreshDashboard(selectedSessionId);
+  }
+
+  async function handleArchiveTask(taskGroupId: string): Promise<void> {
+    await archiveTaskGroup(taskGroupId);
+    await refreshDashboard(selectedSessionId);
+  }
+
   async function handleSendMessage(): Promise<void> {
     const message = composerMessage.trim();
     if (!message) return;
@@ -334,7 +346,11 @@ export default function App() {
               }}
             />
 
-            <TasksPanel tasks={dashboard.tasks} />
+            <TasksPanel
+              tasks={dashboard.tasks}
+              onCreateTask={handleCreateTask}
+              onArchiveTask={handleArchiveTask}
+            />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">

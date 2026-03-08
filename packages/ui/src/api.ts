@@ -93,6 +93,13 @@ export interface ProviderRecord extends ProviderBinding {
   agent: AgentRecord | null;
 }
 
+export interface TaskMutationInput {
+  title: string;
+  source?: string;
+  ownerPrincipal?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface RuntimeChatInput {
   agentRef?: string;
   sessionId?: string;
@@ -217,6 +224,16 @@ export async function sendLocalChatTurn(
   input: RuntimeChatInput,
 ): Promise<{ session: SessionRecord; messages: SessionMessage[]; result: string }> {
   return postJson<{ session: SessionRecord; messages: SessionMessage[]; result: string }>('/api/runtime/chat', input);
+}
+
+export async function createTaskGroup(input: TaskMutationInput): Promise<TaskRecord> {
+  const response = await postJson<{ taskGroup: TaskRecord }>('/api/tasks', input);
+  return response.taskGroup;
+}
+
+export async function archiveTaskGroup(taskGroupId: string): Promise<TaskRecord> {
+  const response = await postJson<{ taskGroup: TaskRecord }>(`/api/tasks/${taskGroupId}/archive`, {});
+  return response.taskGroup;
 }
 
 export async function createAgent(input: AgentMutationInput): Promise<AgentRecord> {

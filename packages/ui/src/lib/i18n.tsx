@@ -189,6 +189,17 @@ const messages: Record<ResolvedLanguage, TranslationTree> = {
     tasks: {
       title: 'Task group watchlist',
       description: 'Grouped sessions, owner source metadata, and current task lifecycle all in one place.',
+      createTask: 'Create task group',
+      creatingTask: 'Creating...',
+      archiveTask: 'Archive task',
+      archivingTask: 'Archiving...',
+      createTitle: 'Create task group',
+      formDescription: 'Register a local task group so related sessions can be bundled together in the console.',
+      nameRequired: 'Task group title is required.',
+      titleLabel: 'Task group title',
+      titlePlaceholder: 'Incident review',
+      sourceLabel: 'Source',
+      sourcePlaceholder: 'ui',
       emptyTitle: 'No task groups recorded yet',
       emptyDescription: 'Grouped work will appear here once multiple sessions are tied together by the daemon.',
       columns: {
@@ -197,6 +208,7 @@ const messages: Record<ResolvedLanguage, TranslationTree> = {
         status: 'Status',
         sessions: 'Sessions',
         updated: 'Updated',
+        actions: 'Actions',
       },
     },
     exposure: {
@@ -415,6 +427,17 @@ const messages: Record<ResolvedLanguage, TranslationTree> = {
     tasks: {
       title: '任务组观察台',
       description: '在一个地方查看分组 Session、owner/source 元数据以及当前任务生命周期。',
+      createTask: '创建任务组',
+      creatingTask: '创建中...',
+      archiveTask: '归档任务组',
+      archivingTask: '归档中...',
+      createTitle: '创建任务组',
+      formDescription: '注册一个本地任务组，把相关 Session 在控制台里组织在一起。',
+      nameRequired: '任务组标题是必填项。',
+      titleLabel: '任务组标题',
+      titlePlaceholder: '事故复盘',
+      sourceLabel: '来源',
+      sourcePlaceholder: 'ui',
       emptyTitle: '还没有任务组记录',
       emptyDescription: '当多个 Session 被 daemon 归为一组后，这里就会显示。',
       columns: {
@@ -423,6 +446,7 @@ const messages: Record<ResolvedLanguage, TranslationTree> = {
         status: '状态',
         sessions: '会话数',
         updated: '更新时间',
+        actions: '操作',
       },
     },
     exposure: {
