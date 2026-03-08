@@ -29,6 +29,25 @@ function clampLineCount(value: string | null): number {
   return Math.min(Math.max(parsed, 1), 1000);
 }
 
+async function readJsonBody(request: Parameters<UiHttpRequestHandler>[0]['request']): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf-8').trim();
+  if (!raw) {
+    return {};
+  }
+
+  const parsed = JSON.parse(raw) as unknown;
+  return typeof parsed === 'object' && parsed ? parsed as Record<string, unknown> : {};
+}
+
 function readLogTail(lines: number): string[] {
   try {
     return readFileSync(getDaemonLogPath(), 'utf-8')
@@ -73,19 +92,51 @@ function serializeSession(
 }
 
 export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHandler {
-  return async ({ method, pathname, searchParams, response }) => {
+  return async ({ method, pathname, searchParams, response, request }) => {
     if (!pathname.startsWith('/api/')) {
       return false;
-    }
-
-    if (method !== 'GET') {
-      writeJson(response, 405, { error: 'method_not_allowed' });
-      return true;
     }
 
     const segments = splitPath(pathname);
 
     try {
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'sessions' && segments[3] === 'stop') {
+        const session = options.runtime.stopSession(segments[2]!);
+        writeJson(response, 200, {
+          session: serializeSession(session, options.store.getAgentById(session.agentId)),
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'sessions' && segments[3] === 'archive') {
+        const session = await options.runtime.archiveSession(segments[2]!);
+        writeJson(response, 200, {
+          session: serializeSession(session, options.store.getAgentById(session.agentId)),
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'sessions' && segments[3] === 'fork') {
+        const body = await readJsonBody(request);
+        const session = options.store.forkSession({
+          sourceSessionId: segments[2]!,
+          taskGroupId: typeof body.taskGroupId === 'string' ? body.taskGroupId : undefined,
+          title: typeof body.title === 'string' ? body.title : undefined,
+          tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)) : undefined,
+        });
+        const snapshot = options.store.getSessionSnapshot(session.id)!;
+        writeJson(response, 200, {
+          session: serializeSession(snapshot.session, options.store.getAgentById(snapshot.session.agentId)),
+          messages: snapshot.messages,
+        });
+        return true;
+      }
+
+      if (method !== 'GET') {
+        writeJson(response, 405, { error: 'method_not_allowed' });
+        return true;
+      }
+
       if (segments.length === 3 && segments[1] === 'daemon' && segments[2] === 'status') {
         const runtime = await options.runtime.getUiStatusSnapshot();
         writeJson(response, 200, {
@@ -225,6 +276,14 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
       writeJson(response, 404, { error: 'not_found' });
       return true;
     } catch (error) {
+      if (error instanceof SyntaxError) {
+        writeJson(response, 400, {
+          error: 'invalid_json',
+          message: error.message,
+        });
+        return true;
+      }
+
       writeJson(response, 500, {
         error: 'internal_error',
         message: (error as Error).message,

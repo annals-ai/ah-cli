@@ -213,6 +213,17 @@ export class DaemonRuntime {
     return next;
   }
 
+  async archiveSession(sessionId: string): Promise<SessionRecord> {
+    const session = this.store.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const next = this.store.archiveSession(sessionId);
+    this.schedulePlatformSessionSync(next.id);
+    return next;
+  }
+
   async getUiStatusSnapshot(): Promise<{
     activeExecutions: number;
     managedSessions: number;

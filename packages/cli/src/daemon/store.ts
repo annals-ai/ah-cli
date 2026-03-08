@@ -662,6 +662,15 @@ export class DaemonStore {
     return rows.map((row) => this.mapMessage(row));
   }
 
+  getSessionSnapshot(sessionId: string): { session: SessionRecord; messages: SessionMessage[] } | null {
+    const session = this.getSession(sessionId);
+    if (!session) return null;
+    return {
+      session,
+      messages: this.getSessionMessages(sessionId),
+    };
+  }
+
   forkSession(input: ForkSessionInput): SessionRecord {
     const source = this.getSession(input.sourceSessionId);
     if (!source) throw new Error(`Source session not found: ${input.sourceSessionId}`);

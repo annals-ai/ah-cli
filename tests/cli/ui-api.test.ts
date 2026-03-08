@@ -13,6 +13,20 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function postJson<T>(url: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 describe('AgentMeshDaemonServer UI API', () => {
   let tempDir: string;
   let dbPath: string;
@@ -64,5 +78,47 @@ describe('AgentMeshDaemonServer UI API', () => {
 
     expect(sessions.items[0]?.id).toBe(session.id);
     expect(messages.items[0]?.content).toContain('Rewrite the hero');
+  });
+
+  it('stops, archives, and forks sessions through the ui api', async () => {
+    const store = new DaemonStore(dbPath);
+    const agent = store.createAgent({
+      name: 'Reviewer Agent',
+      projectPath: '/tmp/reviewer-agent',
+      capabilities: ['review'],
+    });
+    const session = store.createSession({
+      agentId: agent.id,
+      title: 'Patch review',
+      status: 'active',
+    });
+    store.appendMessage({
+      sessionId: session.id,
+      role: 'user',
+      kind: 'call',
+      content: 'Review this patch.',
+    });
+    store.close();
+
+    server = new AgentMeshDaemonServer({ dbPath });
+    const address = await server.listenForTest();
+
+    const stopped = await postJson<{ session: { status: string } }>(
+      `${address.uiBaseUrl}/api/sessions/${session.id}/stop`,
+      {},
+    );
+    const archived = await postJson<{ session: { status: string } }>(
+      `${address.uiBaseUrl}/api/sessions/${session.id}/archive`,
+      {},
+    );
+    const fork = await postJson<{ session: { parentSessionId: string | null; title: string | null } }>(
+      `${address.uiBaseUrl}/api/sessions/${session.id}/fork`,
+      { title: 'Experiment' },
+    );
+
+    expect(stopped.session.status).toBe('paused');
+    expect(archived.session.status).toBe('archived');
+    expect(fork.session.parentSessionId).toBe(session.id);
+    expect(fork.session.title).toBe('Experiment');
   });
 });
