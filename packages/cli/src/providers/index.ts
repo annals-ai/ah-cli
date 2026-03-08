@@ -73,6 +73,10 @@ class AgentsHotProvider implements ProviderRuntime {
     }
 
     const result = await client.post<{ agent: { id: string } }>('/api/developer/agents', payload);
+    await client.put<{ agent: { id: string } }>(
+      `/api/developer/agents/${result.agent.id}`,
+      payload,
+    );
     return {
       remoteAgentId: result.agent.id,
       remoteSlug: input.agent.slug,
