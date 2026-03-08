@@ -80,6 +80,55 @@ describe('AgentMeshDaemonServer UI API', () => {
     expect(messages.items[0]?.content).toContain('Rewrite the hero');
   });
 
+  it('returns an aggregated dashboard snapshot through the ui api', async () => {
+    const store = new DaemonStore(dbPath);
+    const agent = store.createAgent({
+      name: 'Dashboard Agent',
+      projectPath: '/tmp/dashboard-agent',
+      capabilities: ['monitoring'],
+    });
+    const taskGroup = store.createTaskGroup({
+      title: 'Realtime UI',
+      source: 'ui',
+    });
+    store.createSession({
+      agentId: agent.id,
+      taskGroupId: taskGroup.id,
+      title: 'Observe live changes',
+      status: 'idle',
+    });
+    store.close();
+
+    server = new AgentMeshDaemonServer({ dbPath, uiPort: 0 });
+    const address = await server.listenForTest();
+
+    const dashboard = await fetchJson<{
+      status: {
+        daemon: { uiBaseUrl: string | null };
+        counts: { agents: number; sessions: number; taskGroups: number };
+      };
+      agents: Array<{ id: string }>;
+      providerCatalog: string[];
+      sessions: Array<{ agentId: string }>;
+      tasks: Array<{ id: string }>;
+      logs: string[];
+      logPath: string | null;
+    }>(`${address.uiBaseUrl}/api/dashboard?lines=50`);
+
+    expect(dashboard.status.daemon.uiBaseUrl).toBe(address.uiBaseUrl);
+    expect(dashboard.status.counts).toMatchObject({
+      agents: 1,
+      sessions: 1,
+      taskGroups: 1,
+    });
+    expect(dashboard.agents[0]?.id).toBe(agent.id);
+    expect(dashboard.sessions[0]?.agentId).toBe(agent.id);
+    expect(dashboard.tasks[0]?.id).toBe(taskGroup.id);
+    expect(dashboard.providerCatalog.length).toBeGreaterThan(0);
+    expect(Array.isArray(dashboard.logs)).toBe(true);
+    expect(typeof dashboard.logPath).toBe('string');
+  });
+
   it('stops, archives, and forks sessions through the ui api', async () => {
     const store = new DaemonStore(dbPath);
     const agent = store.createAgent({

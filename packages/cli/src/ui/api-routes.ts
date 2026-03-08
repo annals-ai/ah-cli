@@ -19,6 +19,7 @@ interface UiApiRoutesOptions {
   startedAt: string;
   getUiBaseUrl(): string | null;
   getUiPort(): number | null;
+  getLogPath?(): string;
   requestStop(): void;
   requestRestart(): void;
 }
@@ -65,9 +66,13 @@ async function readJsonBody(request: Parameters<UiHttpRequestHandler>[0]['reques
   return typeof parsed === 'object' && parsed ? parsed as Record<string, unknown> : {};
 }
 
-function readLogTail(lines: number): string[] {
+function resolveLogPath(options: UiApiRoutesOptions): string {
+  return options.getLogPath?.() ?? getDaemonLogPath();
+}
+
+function readLogTail(logPath: string, lines: number): string[] {
   try {
-    return readFileSync(getDaemonLogPath(), 'utf-8')
+    return readFileSync(logPath, 'utf-8')
       .split(/\r?\n/u)
       .filter(Boolean)
       .slice(-lines);
@@ -120,6 +125,78 @@ function serializeSessionSnapshot(options: UiApiRoutesOptions, sessionId: string
   return {
     session: serializeSession(snapshot.session, options.store.getAgentById(snapshot.session.agentId)),
     messages: snapshot.messages,
+  };
+}
+
+async function buildDashboardSnapshot(
+  options: UiApiRoutesOptions,
+  lines: number,
+): Promise<{
+  status: Awaited<ReturnType<DaemonRuntime['getUiStatusSnapshot']>>;
+  daemon: {
+    pid: number;
+    startedAt: string;
+    uiBaseUrl: string | null;
+    uiPort: number | null;
+  };
+  counts: {
+    agents: number;
+    sessions: number;
+    taskGroups: number;
+    providerBindings: number;
+  };
+  agents: Array<DaemonAgent & { bindings: ProviderBinding[]; sessionCount: number }>;
+  providerCatalog: string[];
+  sessions: Array<SessionRecord & { agent: DaemonAgent | null }>;
+  tasks: Array<TaskGroup & { sessionCount: number }>;
+  providers: Array<ProviderBinding & { agent: DaemonAgent | null }>;
+  logs: string[];
+  logPath: string;
+}> {
+  const [runtimeSnapshot, agentSessionCounts, taskSessionCounts] = await Promise.all([
+    options.runtime.getUiStatusSnapshot(),
+    Promise.resolve(options.store.getSessionCountsByAgent()),
+    Promise.resolve(options.store.getSessionCountsByTaskGroup()),
+  ]);
+  const logPath = resolveLogPath(options);
+  const agents = options.store.listAgents().map((agent) => serializeAgent(
+    agent,
+    options.store.listProviderBindings(agent.id),
+    agentSessionCounts[agent.id] ?? 0,
+  ));
+  const tasks = options.store.listTaskGroups().map((taskGroup) => serializeTaskGroup(
+    taskGroup,
+    taskSessionCounts[taskGroup.id] ?? 0,
+  ));
+  const sessions = options.store
+    .listSessions({ status: 'all' })
+    .map((session) => serializeSession(session, options.store.getAgentById(session.agentId)));
+  const providers = options.store.listProviderBindings().map((binding) => ({
+    ...binding,
+    agent: options.store.getAgentById(binding.agentId),
+  }));
+
+  return {
+    status: runtimeSnapshot,
+    daemon: {
+      pid: process.pid,
+      startedAt: options.startedAt,
+      uiBaseUrl: options.getUiBaseUrl(),
+      uiPort: options.getUiPort(),
+    },
+    counts: {
+      agents: agents.length,
+      sessions: sessions.length,
+      taskGroups: tasks.length,
+      providerBindings: providers.length,
+    },
+    agents,
+    providerCatalog: getProviderCatalog(),
+    sessions,
+    tasks,
+    providers,
+    logs: readLogTail(logPath, lines),
+    logPath,
   };
 }
 
@@ -222,6 +299,25 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         });
         queueMicrotask(() => {
           options.requestRestart();
+        });
+        return true;
+      }
+
+      if (method === 'GET' && segments.length === 2 && segments[1] === 'dashboard') {
+        const snapshot = await buildDashboardSnapshot(options, clampLineCount(searchParams.get('lines')));
+        writeJson(response, 200, {
+          status: {
+            daemon: snapshot.daemon,
+            counts: snapshot.counts,
+            runtime: snapshot.status,
+          },
+          agents: snapshot.agents,
+          providerCatalog: snapshot.providerCatalog,
+          sessions: snapshot.sessions,
+          tasks: snapshot.tasks,
+          providers: snapshot.providers,
+          logs: snapshot.logs,
+          logPath: snapshot.logPath,
         });
         return true;
       }
@@ -488,9 +584,10 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
       }
 
       if (segments.length === 2 && segments[1] === 'logs') {
+        const logPath = resolveLogPath(options);
         writeJson(response, 200, {
-          items: readLogTail(clampLineCount(searchParams.get('lines'))),
-          path: getDaemonLogPath(),
+          items: readLogTail(logPath, clampLineCount(searchParams.get('lines'))),
+          path: logPath,
         });
         return true;
       }

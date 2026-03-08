@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   archiveSession,
   archiveTaskGroup,
@@ -54,6 +54,8 @@ const CONSOLE_TABS = [
   'logs',
 ] as const;
 
+const DASHBOARD_REFRESH_INTERVAL_MS = 3_000;
+
 type ConsoleTab = typeof CONSOLE_TABS[number];
 
 function sleep(ms: number): Promise<void> {
@@ -88,13 +90,25 @@ export default function App() {
   const [composerTaskGroupId, setComposerTaskGroupId] = useState('none');
   const [actionState, setActionState] = useState<'stop' | 'archive' | 'fork' | 'send' | null>(null);
   const [daemonActionState, setDaemonActionState] = useState<'stop' | 'restart' | null>(null);
+  const refreshInFlightRef = useRef(false);
 
-  async function refreshDashboard(preferredSessionId?: string | null): Promise<void> {
-    setRefreshing(true);
-    setError(null);
+  async function refreshDashboard(
+    preferredSessionId?: string | null,
+    options: { background?: boolean } = {},
+  ): Promise<void> {
+    if (refreshInFlightRef.current) {
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    if (!options.background) {
+      setRefreshing(true);
+      setError(null);
+    }
 
     try {
       const nextDashboard = await getDashboardData();
+      setError(null);
       setDashboard(nextDashboard);
       setSelectedSessionId((current) => {
         const candidate = preferredSessionId ?? current;
@@ -106,14 +120,39 @@ export default function App() {
     } catch (nextError) {
       setError((nextError as Error).message);
     } finally {
+      refreshInFlightRef.current = false;
       setLoading(false);
-      setRefreshing(false);
+      if (!options.background) {
+        setRefreshing(false);
+      }
     }
   }
 
   useEffect(() => {
     void refreshDashboard();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const runRefresh = () => {
+      if (document.visibilityState !== 'visible' || daemonActionState !== null) {
+        return;
+      }
+      void refreshDashboard(selectedSessionId, { background: true });
+    };
+
+    const intervalId = window.setInterval(runRefresh, DASHBOARD_REFRESH_INTERVAL_MS);
+    const handleVisibilityChange = () => runRefresh();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [daemonActionState, selectedSessionId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {

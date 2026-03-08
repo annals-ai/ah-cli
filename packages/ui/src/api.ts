@@ -183,26 +183,7 @@ async function postJson<T>(path: string, body: Record<string, unknown>): Promise
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [status, agents, providerCatalog, sessions, tasks, providers, logs] = await Promise.all([
-    fetchJson<DaemonStatusResponse>('/api/daemon/status'),
-    fetchJson<{ items: AgentRecord[] }>('/api/agents'),
-    fetchJson<{ items: string[] }>('/api/providers/catalog'),
-    fetchJson<{ items: SessionRecord[] }>('/api/sessions'),
-    fetchJson<{ items: TaskRecord[] }>('/api/tasks'),
-    fetchJson<{ items: ProviderRecord[] }>('/api/providers'),
-    fetchJson<{ items: string[]; path: string }>('/api/logs?lines=120'),
-  ]);
-
-  return {
-    status,
-    agents: agents.items,
-    providerCatalog: providerCatalog.items,
-    sessions: sessions.items,
-    tasks: tasks.items,
-    providers: providers.items,
-    logs: logs.items,
-    logPath: logs.path,
-  };
+  return fetchJson<DashboardData>('/api/dashboard?lines=120');
 }
 
 export async function getSessionMessages(sessionId: string): Promise<SessionMessage[]> {
