@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { EmptyState } from '@/components/ui/empty-state';
 import { NativeSelect } from '@/components/ui/native-select';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface SessionFilters {
@@ -35,10 +36,6 @@ const STATUS_OPTIONS: Array<SessionStatus | 'all'> = [
   'archived',
 ];
 
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
 export function SessionsPanel({
   agents,
   tasks,
@@ -48,12 +45,14 @@ export function SessionsPanel({
   onFiltersChange,
   onSelectSession,
 }: SessionsPanelProps) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <Card id="sessions">
       <CardHeader>
-        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Sessions</p>
-        <CardTitle>Live desk</CardTitle>
-        <CardDescription>Filter by agent, task group, or lifecycle state without losing your selected session.</CardDescription>
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('shell.nav.sessions')}</p>
+        <CardTitle>{t('sessions.title')}</CardTitle>
+        <CardDescription>{t('sessions.description')}</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-5">
@@ -61,13 +60,13 @@ export function SessionsPanel({
           <label className="grid gap-2">
             <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
               <Funnel className="size-3.5" />
-              Agent
+              {t('sessions.agentFilter')}
             </span>
             <NativeSelect
               value={filters.agentId}
               onChange={(event) => onFiltersChange({ ...filters, agentId: event.target.value })}
             >
-              <option value="all">All agents</option>
+              <option value="all">{t('sessions.allAgents')}</option>
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
@@ -79,13 +78,13 @@ export function SessionsPanel({
           <label className="grid gap-2">
             <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
               <Layers3 className="size-3.5" />
-              Task group
+              {t('sessions.taskGroupFilter')}
             </span>
             <NativeSelect
               value={filters.taskGroupId}
               onChange={(event) => onFiltersChange({ ...filters, taskGroupId: event.target.value })}
             >
-              <option value="all">All task groups</option>
+              <option value="all">{t('sessions.allTaskGroups')}</option>
                 {tasks.map((task) => (
                   <option key={task.id} value={task.id}>
                     {task.title}
@@ -97,7 +96,7 @@ export function SessionsPanel({
           <label className="grid gap-2">
             <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
               <History className="size-3.5" />
-              Status
+              {t('sessions.statusFilter')}
             </span>
             <NativeSelect
               value={filters.status}
@@ -105,7 +104,7 @@ export function SessionsPanel({
             >
                 {STATUS_OPTIONS.map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    {t(`status.${status}`)}
                   </option>
                 ))}
             </NativeSelect>
@@ -114,8 +113,8 @@ export function SessionsPanel({
 
         {sessions.length === 0 ? (
           <EmptyState
-            title="No sessions match the current filters"
-            description="Try another agent, task group, or lifecycle slice to reveal matching sessions."
+            title={t('sessions.emptyTitle')}
+            description={t('sessions.emptyDescription')}
           />
         ) : (
           <div className="space-y-3">
@@ -134,7 +133,7 @@ export function SessionsPanel({
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <p className="font-medium">{session.title ?? 'Untitled session'}</p>
+                      <p className="font-medium">{session.title ?? t('sessions.untitled')}</p>
                       <p className="text-muted-foreground text-sm">{session.agent?.name ?? session.agentId}</p>
                     </div>
                     <StatusBadge value={session.status} />
@@ -143,9 +142,9 @@ export function SessionsPanel({
                   <p className="mt-3 text-sm leading-6">{session.summary ?? `${session.origin} · ${session.principalType}`}</p>
 
                   <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
-                    <span>{formatTimestamp(session.lastActiveAt)}</span>
-                    <span>{session.taskGroupId ? 'Task linked' : 'Standalone'}</span>
-                    <span>{session.tags.length} tags</span>
+                    <span>{formatDateTime(session.lastActiveAt)}</span>
+                    <span>{session.taskGroupId ? t('sessions.taskLinked') : t('sessions.standalone')}</span>
+                    <span>{t('sessions.tagsCount', { count: session.tags.length })}</span>
                   </div>
 
                   {session.tags.length > 0 ? (

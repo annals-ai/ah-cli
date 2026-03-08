@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Textarea } from '@/components/ui/textarea';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface AgentsPanelProps {
@@ -117,6 +118,7 @@ function AgentFormDialog({
   onOpenChange(open: boolean): void;
   onSubmit(ref: string | null, input: AgentMutationInput): Promise<void>;
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState<AgentFormState>(DEFAULT_AGENT_FORM);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +131,7 @@ function AgentFormDialog({
 
   async function handleSubmit(): Promise<void> {
     if (!form.name.trim() || !form.projectPath.trim()) {
-      setError('Name and project path are required.');
+      setError(t('agents.nameRequired'));
       return;
     }
 
@@ -159,69 +161,69 @@ function AgentFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{agent ? 'Edit agent' : 'Create agent'}</DialogTitle>
-          <DialogDescription>Register a local daemon-owned agent or update its runtime metadata.</DialogDescription>
+          <DialogTitle>{agent ? t('agents.editTitle') : t('agents.createTitle')}</DialogTitle>
+          <DialogDescription>{t('agents.formDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
-            <span className="text-sm font-medium">Name</span>
+            <span className="text-sm font-medium">{t('common.name')}</span>
             <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
           </label>
           <label className="grid gap-2">
-            <span className="text-sm font-medium">Slug</span>
+            <span className="text-sm font-medium">{t('common.slug')}</span>
             <Input
               value={form.slug}
               onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-              placeholder="optional"
+              placeholder={t('agents.slugPlaceholder')}
             />
           </label>
           <label className="grid gap-2">
-            <span className="text-sm font-medium">Runtime</span>
+            <span className="text-sm font-medium">{t('common.runtime')}</span>
             <Input
               value={form.runtimeType}
               onChange={(event) => setForm((current) => ({ ...current, runtimeType: event.target.value }))}
             />
           </label>
           <label className="grid gap-2">
-            <span className="text-sm font-medium">Visibility</span>
+            <span className="text-sm font-medium">{t('common.visibility')}</span>
             <NativeSelect
               value={form.visibility}
               onChange={(event) =>
                 setForm((current) => ({ ...current, visibility: event.target.value as AgentMutationInput['visibility'] }))
               }
             >
-              <option value="public">public</option>
-              <option value="private">private</option>
-              <option value="unlisted">unlisted</option>
+              <option value="public">{t('status.public')}</option>
+              <option value="private">{t('status.private')}</option>
+              <option value="unlisted">{t('status.unlisted')}</option>
             </NativeSelect>
           </label>
         </div>
 
         <label className="grid gap-2">
-          <span className="text-sm font-medium">Project path</span>
+          <span className="text-sm font-medium">{t('common.projectPath')}</span>
           <Input
             value={form.projectPath}
             onChange={(event) => setForm((current) => ({ ...current, projectPath: event.target.value }))}
-            placeholder="/absolute/path/to/project"
+            placeholder={t('agents.projectPathPlaceholder')}
           />
         </label>
 
         <label className="grid gap-2">
-          <span className="text-sm font-medium">Capabilities</span>
+          <span className="text-sm font-medium">{t('common.capabilities')}</span>
           <Input
             value={form.capabilitiesText}
             onChange={(event) => setForm((current) => ({ ...current, capabilitiesText: event.target.value }))}
-            placeholder="search, code, review"
+            placeholder={t('agents.capabilitiesPlaceholder')}
           />
         </label>
 
         <label className="grid gap-2">
-          <span className="text-sm font-medium">Description</span>
+          <span className="text-sm font-medium">{t('common.description')}</span>
           <Textarea
             value={form.description}
             onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-            placeholder="What this local agent is responsible for..."
+            placeholder={t('agents.descriptionPlaceholder')}
             className="min-h-24"
           />
         </label>
@@ -233,17 +235,17 @@ function AgentFormDialog({
             onChange={(event) => setForm((current) => ({ ...current, sandbox: event.target.checked }))}
             className="size-4"
           />
-          Enable sandbox / workspace isolation for this agent
+          {t('agents.sandboxLabel')}
         </label>
 
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={pending}>
-            {pending ? (agent ? 'Saving...' : 'Creating...') : agent ? 'Save changes' : 'Create agent'}
+            {pending ? (agent ? t('common.saving') : t('common.creatingAgent')) : agent ? t('common.saveChanges') : t('common.createAgent')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -264,6 +266,7 @@ function ProviderBindingDialog({
   onOpenChange(open: boolean): void;
   onSubmit(agentRef: string, provider: string, config: Record<string, unknown>): Promise<void>;
 }) {
+  const { t } = useI18n();
   const [provider, setProvider] = useState('');
   const [configText, setConfigText] = useState('{}');
   const [pending, setPending] = useState(false);
@@ -284,7 +287,7 @@ function ProviderBindingDialog({
 
   async function handleSubmit(): Promise<void> {
     if (!state || !provider) {
-      setError('Choose a provider.');
+      setError(t('agents.chooseProvider'));
       return;
     }
 
@@ -293,7 +296,7 @@ function ProviderBindingDialog({
       const parsed = JSON.parse(configText || '{}') as unknown;
       parsedConfig = typeof parsed === 'object' && parsed ? parsed as Record<string, unknown> : {};
     } catch {
-      setError('Config JSON is invalid.');
+      setError(t('agents.invalidConfigJson'));
       return;
     }
 
@@ -314,16 +317,16 @@ function ProviderBindingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Expose provider</DialogTitle>
+          <DialogTitle>{t('agents.exposeTitle')}</DialogTitle>
           <DialogDescription>
-            Connect {state?.agent.name ?? 'this agent'} to a local or remote provider binding.
+            {t('agents.exposeDescription', { agent: state?.agent.name ?? 'this agent' })}
           </DialogDescription>
         </DialogHeader>
 
         <label className="grid gap-2">
-          <span className="text-sm font-medium">Provider</span>
+          <span className="text-sm font-medium">{t('common.provider')}</span>
           <NativeSelect value={provider} onChange={(event) => setProvider(event.target.value)} disabled={providers.length === 0}>
-            {providers.length === 0 ? <option value="">No providers available</option> : null}
+            {providers.length === 0 ? <option value="">{t('common.noProvidersAvailable')}</option> : null}
               {providers.map((entry) => (
                 <option key={entry} value={entry}>
                   {entry}
@@ -333,7 +336,7 @@ function ProviderBindingDialog({
         </label>
 
         <label className="grid gap-2">
-          <span className="text-sm font-medium">Config JSON</span>
+          <span className="text-sm font-medium">{t('common.configJson')}</span>
           <Textarea
             value={configText}
             onChange={(event) => setConfigText(event.target.value)}
@@ -346,10 +349,10 @@ function ProviderBindingDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={() => void handleSubmit()} disabled={pending || !provider}>
-            {pending ? 'Saving...' : 'Save binding'}
+            {pending ? t('common.saving') : t('common.saveBinding')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -368,6 +371,7 @@ export function AgentsPanel({
   onUnexposeAgent,
   onSelectAgent,
 }: AgentsPanelProps) {
+  const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
   const [providerState, setProviderState] = useState<ProviderDialogState | null>(null);
@@ -381,7 +385,7 @@ export function AgentsPanel({
   }
 
   async function handleRemove(ref: string, name: string): Promise<void> {
-    if (!window.confirm(`Remove agent "${name}"?`)) {
+    if (!window.confirm(t('agents.removeConfirm', { name }))) {
       return;
     }
     await onRemoveAgent(ref);
@@ -391,7 +395,7 @@ export function AgentsPanel({
   }
 
   async function handleUnexpose(ref: string, provider: string): Promise<void> {
-    if (!window.confirm(`Disable ${provider} for this agent?`)) {
+    if (!window.confirm(t('agents.disableConfirm', { provider }))) {
       return;
     }
     await onUnexposeAgent(ref, provider);
@@ -402,24 +406,24 @@ export function AgentsPanel({
       <Card id="agents" className="h-full">
         <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Agents</p>
-            <CardTitle>Runtime roster</CardTitle>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('shell.nav.agents')}</p>
+            <CardTitle>{t('agents.title')}</CardTitle>
             <CardDescription>
-              Monitor local agents, filter their sessions, and manage provider bindings without leaving the console.
+              {t('agents.description')}
             </CardDescription>
           </div>
 
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Create agent
+            {t('common.createAgent')}
           </Button>
         </CardHeader>
 
         <CardContent>
           {agents.length === 0 ? (
             <EmptyState
-              title="No local agents registered"
-              description="Create the first agent here, then use provider bindings when you are ready to expose it."
+              title={t('agents.emptyTitle')}
+              description={t('common.createFirstAgent')}
               icon={<Bot className="size-5" />}
             />
           ) : (
@@ -449,7 +453,7 @@ export function AgentsPanel({
                           {agent.runtimeType}
                         </Badge>
                         <Badge variant="outline" className="rounded-full">
-                          {agent.sessionCount} sessions
+                          {t('common.sessionsCount', { count: agent.sessionCount })}
                         </Badge>
                       </div>
                     </div>
@@ -459,7 +463,7 @@ export function AgentsPanel({
                     <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
                       <span className="inline-flex items-center gap-1.5">
                         <ShieldCheck className="size-3.5" />
-                        {agent.sandbox ? 'Sandbox on' : 'Sandbox off'}
+                        {agent.sandbox ? t('common.sandboxOn') : t('common.sandboxOff')}
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <FolderTree className="size-3.5" />
@@ -467,7 +471,7 @@ export function AgentsPanel({
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Lock className="size-3.5" />
-                        {agent.bindings.length} provider bindings
+                        {t('common.providerBindings', { count: agent.bindings.length })}
                       </span>
                     </div>
 
@@ -487,11 +491,11 @@ export function AgentsPanel({
                         variant={active ? 'default' : 'outline'}
                         onClick={() => onSelectAgent(active ? 'all' : agent.id)}
                       >
-                        {active ? 'Showing sessions' : 'Filter sessions'}
+                        {active ? t('common.showingSessions') : t('common.filterSessions')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setEditingAgent(agent)}>
                         <Pencil className="size-4" />
-                        Edit
+                        {t('common.edit')}
                       </Button>
                       <Button
                         size="sm"
@@ -499,11 +503,11 @@ export function AgentsPanel({
                         onClick={() => setProviderState({ agent })}
                       >
                         <PlugZap className="size-4" />
-                        Expose
+                        {t('common.expose')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => void handleRemove(agent.id, agent.name)}>
                         <Trash2 className="size-4" />
-                        Remove
+                        {t('common.remove')}
                       </Button>
                     </div>
 
@@ -520,7 +524,7 @@ export function AgentsPanel({
                                 <StatusBadge value={binding.status} />
                               </div>
                               <p className="text-muted-foreground text-xs">
-                                {binding.remoteSlug ?? binding.remoteAgentId ?? 'Local only'}
+                                {binding.remoteSlug ?? binding.remoteAgentId ?? t('common.localOnly')}
                               </p>
                             </div>
 
@@ -530,7 +534,7 @@ export function AgentsPanel({
                                 variant="outline"
                                 onClick={() => setProviderState({ agent, provider: binding.provider })}
                               >
-                                Configure
+                                {t('common.configure')}
                               </Button>
                               <Button
                                 size="sm"
@@ -538,13 +542,13 @@ export function AgentsPanel({
                                 onClick={() => void handleUnexpose(agent.id, binding.provider)}
                                 disabled={binding.status === 'inactive'}
                               >
-                                Disable
+                                {t('common.disable')}
                               </Button>
                             </div>
                           </div>
                         ))
                       ) : (
-                        <p className="text-muted-foreground text-xs">No provider exposure configured yet.</p>
+                        <p className="text-muted-foreground text-xs">{t('common.noProviderExposure')}</p>
                       )}
                     </div>
                   </article>

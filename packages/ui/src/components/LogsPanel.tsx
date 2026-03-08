@@ -2,6 +2,7 @@ import { FileText } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useI18n } from '@/lib/i18n';
 
 interface LogsPanelProps {
   logs: string[];
@@ -9,19 +10,21 @@ interface LogsPanelProps {
 }
 
 export function LogsPanel({ logs, path }: LogsPanelProps) {
+  const { t } = useI18n();
+
   return (
     <Card id="logs">
       <CardHeader>
-        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Logs</p>
-        <CardTitle>Recent daemon tail</CardTitle>
-        <CardDescription className="break-all">{path ?? 'Log path unavailable'}</CardDescription>
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('shell.nav.logs')}</p>
+        <CardTitle>{t('logs.title')}</CardTitle>
+        <CardDescription className="break-all">{path ?? t('logs.unavailable')}</CardDescription>
       </CardHeader>
 
       <CardContent>
         {logs.length === 0 ? (
           <EmptyState
-            title="No log lines yet"
-            description="The local daemon log will surface queue pressure, provider startup failures, and runtime warnings."
+            title={t('logs.emptyTitle')}
+            description={t('logs.emptyDescription')}
             icon={<FileText className="size-5" />}
           />
         ) : (

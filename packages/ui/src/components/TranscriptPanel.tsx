@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface TranscriptPanelProps {
@@ -27,10 +28,6 @@ interface TranscriptPanelProps {
   onStop(): void;
   onArchive(): void;
   onFork(): void;
-}
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
 }
 
 function normalizeRole(role: string): 'assistant' | 'system' | 'tool' | 'user' | 'data' {
@@ -60,6 +57,7 @@ export function TranscriptPanel({
   onArchive,
   onFork,
 }: TranscriptPanelProps) {
+  const { t, formatDateTime } = useI18n();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const visibleMessages = messages.filter((message) => {
@@ -77,21 +75,21 @@ export function TranscriptPanel({
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-1.5">
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Transcript</p>
-            <CardTitle>{session?.title ?? 'Select a session'}</CardTitle>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('transcript.title')}</p>
+            <CardTitle>{session?.title ?? t('transcript.emptySession')}</CardTitle>
             <CardDescription>
-              Inspect local user, assistant, system, and tool events without leaving the daemon console.
+              {t('transcript.description')}
             </CardDescription>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={onArchive} disabled={!session || actionState !== null}>
               <Archive className="size-4" />
-              {actionState === 'archive' ? 'Archiving...' : 'Archive'}
+              {actionState === 'archive' ? t('common.archiving') : t('common.archive')}
             </Button>
             <Button type="button" variant="destructive" onClick={onStop} disabled={!session || actionState !== null}>
               <StopCircle className="size-4" />
-              {actionState === 'stop' ? 'Stopping...' : 'Stop'}
+              {actionState === 'stop' ? t('common.stopping') : t('common.stop')}
             </Button>
           </div>
         </div>
@@ -106,7 +104,7 @@ export function TranscriptPanel({
             </Badge>
             <StatusBadge value={session.status} />
             <Badge variant="outline" className="rounded-full">
-              {formatTimestamp(session.lastActiveAt)}
+              {formatDateTime(session.lastActiveAt)}
             </Badge>
           </div>
         ) : null}
@@ -117,33 +115,33 @@ export function TranscriptPanel({
           <label className="grid gap-2">
             <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
               <Search className="size-3.5" />
-              Search transcript
+              {t('common.searchTranscript')}
             </span>
             <Input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search content, roles, kinds, metadata..."
+              placeholder={t('transcript.searchPlaceholder')}
               disabled={!session}
             />
           </label>
 
           <label className="grid gap-2">
-            <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Fork title</span>
+            <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('common.forkTitle')}</span>
             <Input
               type="text"
               value={forkTitle}
               onChange={(event) => onForkTitleChange(event.target.value)}
-              placeholder="Experiment"
+              placeholder={t('transcript.forkPlaceholder')}
               disabled={!session || actionState !== null}
             />
           </label>
 
           <div className="grid gap-2">
-            <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Action</span>
+            <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('common.action')}</span>
             <Button type="button" onClick={onFork} disabled={!session || actionState !== null}>
               <SquareSplitHorizontal className="size-4" />
-              {actionState === 'fork' ? 'Forking...' : 'Fork session'}
+              {actionState === 'fork' ? t('common.forkingSession') : t('common.forkSession')}
             </Button>
           </div>
         </div>
@@ -152,20 +150,20 @@ export function TranscriptPanel({
           <Conversation className="min-h-[34rem]">
             {!session ? (
               <ConversationEmptyState
-                title="Pick a session from the desk"
-                description="The transcript viewer shows every local message, including tool and system events."
+                title={t('transcript.pickSessionTitle')}
+                description={t('transcript.pickSessionDescription')}
               />
             ) : loading ? (
               <ConversationEmptyState
-                title="Loading transcript..."
-                description="Pulling local history from the daemon."
+                title={t('transcript.loadingTitle')}
+                description={t('transcript.loadingDescription')}
               />
             ) : error ? (
-              <ConversationEmptyState title="Transcript load failed" description={error} />
+              <ConversationEmptyState title={t('transcript.loadFailed')} description={error} />
             ) : visibleMessages.length === 0 ? (
               <ConversationEmptyState
-                title="No messages match the current search"
-                description="Clear the query to inspect the full session stream."
+                title={t('transcript.noMatchTitle')}
+                description={t('transcript.noMatchDescription')}
               />
             ) : (
               <>
@@ -174,21 +172,21 @@ export function TranscriptPanel({
                     <Message key={message.id} from={normalizeRole(message.role)}>
                       <MessageHeader className={cn(normalizeRole(message.role) === 'user' && 'justify-end')}>
                         <Badge variant="outline" className="rounded-full capitalize">
-                          {message.role}
+                          {t(`role.${message.role}`)}
                         </Badge>
                         <Badge variant="secondary" className="rounded-full">
                           {message.kind}
                         </Badge>
-                        <span>{formatTimestamp(message.createdAt)}</span>
+                        <span>{formatDateTime(message.createdAt)}</span>
                         <span>#{message.seq}</span>
                       </MessageHeader>
 
                       <MessageContent>
-                        <MessageResponse>{message.content || '(No message content)'}</MessageResponse>
+                        <MessageResponse>{message.content || t('common.noMessageContent')}</MessageResponse>
 
                         {Object.keys(message.metadata).length > 0 ? (
                           <details className="mt-3 rounded-xl border border-border/70 bg-background/60 p-3 text-xs text-foreground/80">
-                            <summary className="cursor-pointer list-none font-medium">Metadata</summary>
+                            <summary className="cursor-pointer list-none font-medium">{t('common.metadata')}</summary>
                             <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono leading-5">
                               {JSON.stringify(message.metadata, null, 2)}
                             </pre>

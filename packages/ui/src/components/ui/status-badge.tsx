@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -23,6 +24,8 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ value, className }: StatusBadgeProps) {
+  const { statusLabel } = useI18n();
+
   return (
     <Badge
       variant="outline"
@@ -32,7 +35,7 @@ export function StatusBadge({ value, className }: StatusBadgeProps) {
         className,
       )}
     >
-      {value}
+      {statusLabel(value)}
     </Badge>
   );
 }

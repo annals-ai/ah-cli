@@ -4,6 +4,7 @@ import { ExternalLink, Globe2, PlugZap } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useI18n } from '@/lib/i18n';
 
 function visibleUrls(config: Record<string, unknown>): Array<{ key: string; value: string }> {
   return Object.entries(config)
@@ -13,19 +14,21 @@ function visibleUrls(config: Record<string, unknown>): Array<{ key: string; valu
 }
 
 export function ExposurePanel({ providers }: { providers: ProviderRecord[] }) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <Card id="exposure">
       <CardHeader>
-        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Exposure</p>
-        <CardTitle>Provider bindings</CardTitle>
-        <CardDescription>Gateway reachability, remote ids, and advertised endpoints stay visible alongside local history.</CardDescription>
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('shell.nav.exposure')}</p>
+        <CardTitle>{t('exposure.title')}</CardTitle>
+        <CardDescription>{t('exposure.description')}</CardDescription>
       </CardHeader>
 
       <CardContent>
         {providers.length === 0 ? (
           <EmptyState
-            title="No providers exposed"
-            description="Bindings such as Agents Hot and generic A2A will appear here after registration."
+            title={t('exposure.emptyTitle')}
+            description={t('exposure.emptyDescription')}
             icon={<Globe2 className="size-5" />}
           />
         ) : (
@@ -43,15 +46,15 @@ export function ExposurePanel({ providers }: { providers: ProviderRecord[] }) {
                     <StatusBadge value={provider.status} />
                   </div>
 
-                  <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
-                    <span className="inline-flex items-center gap-1.5">
-                      <PlugZap className="size-3.5" />
-                      {provider.remoteSlug ?? provider.remoteAgentId ?? 'Local only'}
-                    </span>
-                    <span>
-                      {provider.lastSyncedAt ? new Date(provider.lastSyncedAt).toLocaleString() : 'Never synced'}
-                    </span>
-                  </div>
+                    <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        <PlugZap className="size-3.5" />
+                        {provider.remoteSlug ?? provider.remoteAgentId ?? t('common.localOnly')}
+                      </span>
+                      <span>
+                      {provider.lastSyncedAt ? formatDateTime(provider.lastSyncedAt) : t('common.neverSynced')}
+                      </span>
+                    </div>
 
                   {urls.length > 0 ? (
                     <div className="mt-4 space-y-2">
@@ -76,7 +79,7 @@ export function ExposurePanel({ providers }: { providers: ProviderRecord[] }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground mt-4 text-sm">No URL endpoints advertised in this binding config.</p>
+                    <p className="text-muted-foreground mt-4 text-sm">{t('exposure.noUrlEndpoints')}</p>
                   )}
                 </article>
               );

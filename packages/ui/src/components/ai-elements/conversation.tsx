@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom';
 
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
@@ -34,12 +35,14 @@ interface ConversationEmptyStateProps extends ComponentProps<'div'> {
 
 export function ConversationEmptyState({
   className,
-  title = 'No messages yet',
-  description = 'Start a conversation to see messages here.',
+  title,
+  description,
   icon,
   children,
   ...props
 }: ConversationEmptyStateProps) {
+  const { t } = useI18n();
+
   return (
     <div
       className={cn(
@@ -52,8 +55,8 @@ export function ConversationEmptyState({
         <>
           {icon ? <div className="text-muted-foreground">{icon}</div> : null}
           <div className="space-y-1">
-            <h3 className="text-sm font-medium">{title}</h3>
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <h3 className="text-sm font-medium">{title ?? t('transcript.pickSessionTitle')}</h3>
+            <p className="text-muted-foreground text-sm">{description ?? t('transcript.pickSessionDescription')}</p>
           </div>
         </>
       )}
@@ -65,6 +68,7 @@ export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
 
 export function ConversationScrollButton({ className, ...props }: ConversationScrollButtonProps) {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const { t } = useI18n();
 
   const handleScrollToBottom = useCallback(() => {
     scrollToBottom();
@@ -84,7 +88,7 @@ export function ConversationScrollButton({ className, ...props }: ConversationSc
       {...props}
     >
       <ArrowDownIcon className="size-4" />
-      <span className="sr-only">Scroll to bottom</span>
+      <span className="sr-only">{t('transcript.scrollToBottom')}</span>
     </Button>
   );
 }

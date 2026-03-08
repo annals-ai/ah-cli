@@ -24,6 +24,7 @@ import { SessionsPanel } from './components/SessionsPanel';
 import { TasksPanel } from './components/TasksPanel';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useI18n } from '@/lib/i18n';
 
 interface SessionFilters {
   agentId: string;
@@ -38,6 +39,7 @@ const DEFAULT_FILTERS: SessionFilters = {
 };
 
 export default function App() {
+  const { t } = useI18n();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -205,8 +207,8 @@ export default function App() {
       {error ? (
         <Card className="border-destructive/30">
           <CardHeader>
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Alert</p>
-            <CardTitle>Snapshot refresh failed</CardTitle>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('app.alert')}</p>
+            <CardTitle>{t('app.snapshotRefreshFailed')}</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
         </Card>
@@ -215,9 +217,9 @@ export default function App() {
       {loading && !dashboard ? (
         <Card>
           <CardHeader>
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">Loading</p>
-            <CardTitle>Collecting local daemon state</CardTitle>
-            <CardDescription>Fetching agents, sessions, tasks, providers, and recent logs.</CardDescription>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{t('app.loading')}</p>
+            <CardTitle>{t('app.collectingState')}</CardTitle>
+            <CardDescription>{t('app.fetchingState')}</CardDescription>
           </CardHeader>
         </Card>
       ) : null}

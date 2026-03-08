@@ -3,6 +3,8 @@ import { Activity, Globe2, RefreshCw, Server } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { NativeSelect } from '@/components/ui/native-select';
+import { useI18n, type LanguagePreference } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface AppShellProps {
@@ -13,21 +15,18 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'sessions', label: 'Sessions' },
-  { id: 'transcript', label: 'Transcript' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'exposure', label: 'Exposure' },
-  { id: 'logs', label: 'Logs' },
-];
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
 export function AppShell({ uiBaseUrl, startedAt, refreshing, onRefresh, children }: AppShellProps) {
+  const { language, setLanguage, t, formatDateTime } = useI18n();
+  const navItems = [
+    { id: 'overview', label: t('shell.nav.overview') },
+    { id: 'agents', label: t('shell.nav.agents') },
+    { id: 'sessions', label: t('shell.nav.sessions') },
+    { id: 'transcript', label: t('shell.nav.transcript') },
+    { id: 'tasks', label: t('shell.nav.tasks') },
+    { id: 'exposure', label: t('shell.nav.exposure') },
+    { id: 'logs', label: t('shell.nav.logs') },
+  ];
+
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="mx-auto grid w-full max-w-[1680px] gap-6 px-4 py-4 lg:grid-cols-[17.5rem_minmax(0,1fr)] lg:px-6 lg:py-6">
@@ -37,51 +36,65 @@ export function AppShell({ uiBaseUrl, startedAt, refreshing, onRefresh, children
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   <Activity className="size-3.5" />
-                  Local Console
+                  {t('shell.localConsole')}
                 </div>
 
                 <div className="space-y-2">
                   <h1 className="text-3xl font-semibold tracking-tight">Agent Mesh</h1>
                   <p className="text-muted-foreground text-sm leading-6">
-                    A local operations desk for daemon health, registered agents, session history, provider exposure,
-                    and recent runtime activity.
+                    {t('shell.description')}
                   </p>
                 </div>
               </div>
 
+              <div className="grid gap-2">
+                <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">
+                  {t('common.language')}
+                </span>
+                <NativeSelect
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value as LanguagePreference)}
+                  aria-label={t('common.language')}
+                >
+                  <option value="system">{t('common.auto')}</option>
+                  <option value="en">{t('common.english')}</option>
+                  <option value="zh">{t('common.chinese')}</option>
+                </NativeSelect>
+              </div>
+
               <nav aria-label="Sections" className="grid gap-1">
-                {NAV_ITEMS.map((item) => (
+                {navItems.map((item) => (
                   <a
                     key={item.id}
                     href={`#${item.id}`}
                     className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
                   >
                     <span>{item.label}</span>
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">Jump</span>
+                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">{t('common.jump')}</span>
                   </a>
                 ))}
               </nav>
 
               <Button className="mt-auto w-full justify-center gap-2" onClick={onRefresh} disabled={refreshing}>
                 <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
-                {refreshing ? 'Refreshing snapshot...' : 'Refresh snapshot'}
+                {refreshing ? t('common.refreshingSnapshot') : t('common.refreshSnapshot')}
               </Button>
 
               <div className="grid gap-3">
                 <div className="rounded-xl border bg-muted/35 p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                     <Globe2 className="size-3.5" />
-                    UI origin
+                    {t('shell.uiOrigin')}
                   </div>
-                  <p className="break-all text-sm font-medium">{uiBaseUrl ?? 'offline'}</p>
+                  <p className="break-all text-sm font-medium">{uiBaseUrl ?? t('common.offline')}</p>
                 </div>
 
                 <div className="rounded-xl border bg-muted/35 p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                     <Server className="size-3.5" />
-                    Daemon start
+                    {t('shell.daemonStart')}
                   </div>
-                  <p className="text-sm font-medium">{formatTimestamp(startedAt)}</p>
+                  <p className="text-sm font-medium">{formatDateTime(startedAt)}</p>
                 </div>
               </div>
             </CardContent>

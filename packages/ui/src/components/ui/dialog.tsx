@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { XIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface DialogContextValue {
@@ -56,6 +57,7 @@ function DialogContent({
   showCloseButton?: boolean;
 }) {
   const { open, onOpenChange } = useDialogContext();
+  const { t } = useI18n();
 
   React.useEffect(() => {
     if (!open) return;
@@ -95,7 +97,7 @@ function DialogContent({
               onClick={() => onOpenChange(false)}
             >
               <XIcon className="size-4" />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t('common.closeDialog')}</span>
             </button>
           ) : null}
         </div>
@@ -117,6 +119,7 @@ function DialogFooter({
   showCloseButton?: boolean;
 }) {
   const { onOpenChange } = useDialogContext();
+  const { t } = useI18n();
 
   return (
     <div
@@ -127,7 +130,7 @@ function DialogFooter({
       {children}
       {showCloseButton ? (
         <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Close
+          {t('common.close')}
         </Button>
       ) : null}
     </div>
