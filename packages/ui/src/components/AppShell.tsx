@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Activity, Globe2, RefreshCw, Server } from 'lucide-react';
+import { Activity, Globe2, Power, RefreshCw, RotateCcw, Server } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,11 +12,23 @@ interface AppShellProps {
   uiBaseUrl: string | null;
   startedAt: string;
   refreshing: boolean;
+  daemonActionState: 'stop' | 'restart' | null;
   onRefresh(): void;
+  onStopDaemon(): void;
+  onRestartDaemon(): void;
   children: ReactNode;
 }
 
-export function AppShell({ uiBaseUrl, startedAt, refreshing, onRefresh, children }: AppShellProps) {
+export function AppShell({
+  uiBaseUrl,
+  startedAt,
+  refreshing,
+  daemonActionState,
+  onRefresh,
+  onStopDaemon,
+  onRestartDaemon,
+  children,
+}: AppShellProps) {
   const { language, setLanguage, t, formatDateTime } = useI18n();
   const { theme, setTheme } = useTheme();
   const navItems = [
@@ -94,10 +106,36 @@ export function AppShell({ uiBaseUrl, startedAt, refreshing, onRefresh, children
                 ))}
               </nav>
 
-              <Button className="mt-auto w-full justify-center gap-2" onClick={onRefresh} disabled={refreshing}>
-                <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
-                {refreshing ? t('common.refreshingSnapshot') : t('common.refreshSnapshot')}
-              </Button>
+              <div className="mt-auto grid gap-2">
+                <Button className="w-full justify-center gap-2" onClick={onRefresh} disabled={refreshing || daemonActionState !== null}>
+                  <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
+                  {refreshing ? t('common.refreshingSnapshot') : t('common.refreshSnapshot')}
+                </Button>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-center gap-2"
+                    onClick={onRestartDaemon}
+                    disabled={daemonActionState !== null}
+                  >
+                    <RotateCcw className={cn('size-4', daemonActionState === 'restart' && 'animate-spin')} />
+                    {daemonActionState === 'restart' ? t('shell.restartingDaemon') : t('shell.restartDaemon')}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="justify-center gap-2"
+                    onClick={onStopDaemon}
+                    disabled={daemonActionState !== null}
+                  >
+                    <Power className="size-4" />
+                    {daemonActionState === 'stop' ? t('shell.stoppingDaemon') : t('shell.stopDaemon')}
+                  </Button>
+                </div>
+              </div>
 
               <div className="grid gap-3">
                 <div className="rounded-xl border bg-muted/35 p-3">

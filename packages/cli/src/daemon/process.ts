@@ -168,6 +168,78 @@ export async function stopDaemonBackground(): Promise<boolean> {
   return true;
 }
 
+export function scheduleDaemonRestartFromCurrentProcess(): void {
+  ensureDaemonDirs();
+
+  const entryPath = process.argv[1];
+  if (!entryPath) {
+    throw new Error('Unable to determine the agent-mesh CLI entrypoint for restart.');
+  }
+
+  const logPath = getDaemonLogPath();
+  const supervisorCode = `
+const { spawn } = require('node:child_process');
+const { closeSync, openSync, unlinkSync, writeFileSync, appendFileSync } = require('node:fs');
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+(async () => {
+  const pid = Number(process.env.AGENT_MESH_TARGET_PID || '0');
+  const logPath = process.env.AGENT_MESH_LOG_PATH;
+  const pidPath = process.env.AGENT_MESH_PID_PATH;
+  const socketPath = process.env.AGENT_MESH_SOCKET_PATH;
+  const entryPath = process.env.AGENT_MESH_ENTRY_PATH;
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (!isAlive(pid)) break;
+    await sleep(100);
+  }
+
+  try { unlinkSync(pidPath); } catch {}
+  try { unlinkSync(socketPath); } catch {}
+
+  const logFd = openSync(logPath, 'a', 0o600);
+  const child = spawn(process.execPath, [entryPath, 'daemon', 'serve'], {
+    detached: true,
+    stdio: ['ignore', logFd, logFd],
+    env: process.env,
+  });
+  child.unref();
+  closeSync(logFd);
+  writeFileSync(pidPath, String(child.pid) + '\\n', { mode: 0o600 });
+})().catch((error) => {
+  try {
+    appendFileSync(process.env.AGENT_MESH_LOG_PATH, '[restart-supervisor] ' + String(error) + '\\n');
+  } catch {}
+});
+`;
+
+  const supervisor = spawn(process.execPath, ['-e', supervisorCode], {
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      AGENT_MESH_ENTRY_PATH: entryPath,
+      AGENT_MESH_LOG_PATH: logPath,
+      AGENT_MESH_PID_PATH: getDaemonPidPath(),
+      AGENT_MESH_SOCKET_PATH: getDaemonSocketPath(),
+      AGENT_MESH_TARGET_PID: String(process.pid),
+    },
+  });
+  supervisor.unref();
+}
+
 export async function waitForDaemonReady(timeoutMs = 30_000): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {

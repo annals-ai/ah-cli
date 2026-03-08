@@ -9,8 +9,10 @@ import {
   getDashboardData,
   getSessionMessages,
   removeAgent,
+  restartDaemon,
   sendLocalChatTurn,
   stopSession,
+  stopDaemon,
   unexposeAgent,
   updateAgent,
   type AgentMutationInput,
@@ -41,6 +43,10 @@ const DEFAULT_FILTERS: SessionFilters = {
   status: 'all',
 };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function App() {
   const { t } = useI18n();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -57,6 +63,7 @@ export default function App() {
   const [composerAgentId, setComposerAgentId] = useState('');
   const [composerTaskGroupId, setComposerTaskGroupId] = useState('none');
   const [actionState, setActionState] = useState<'stop' | 'archive' | 'fork' | 'send' | null>(null);
+  const [daemonActionState, setDaemonActionState] = useState<'stop' | 'restart' | null>(null);
 
   async function refreshDashboard(preferredSessionId?: string | null): Promise<void> {
     setRefreshing(true);
@@ -256,13 +263,72 @@ export default function App() {
     }
   }
 
+  async function waitForUiHealth(uiBaseUrl: string): Promise<void> {
+    const deadline = Date.now() + 20_000;
+
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(`${uiBaseUrl}/health`, {
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          return;
+        }
+      } catch {}
+
+      await sleep(500);
+    }
+
+    throw new Error(t('shell.restartTimeout'));
+  }
+
+  async function handleStopDaemon(): Promise<void> {
+    setDaemonActionState('stop');
+    setError(null);
+
+    try {
+      await stopDaemon();
+      setError(t('shell.stopNotice'));
+    } catch (nextError) {
+      setError((nextError as Error).message);
+      setDaemonActionState(null);
+    }
+  }
+
+  async function handleRestartDaemon(): Promise<void> {
+    setDaemonActionState('restart');
+    setError(null);
+
+    try {
+      const response = await restartDaemon();
+      const reconnectUrl = response.uiBaseUrl ?? dashboard?.status.daemon.uiBaseUrl;
+      if (!reconnectUrl) {
+        throw new Error(t('shell.restartUnavailable'));
+      }
+
+      await waitForUiHealth(reconnectUrl);
+      await refreshDashboard(selectedSessionId);
+    } catch (nextError) {
+      setError((nextError as Error).message);
+    } finally {
+      setDaemonActionState(null);
+    }
+  }
+
   return (
     <AppShell
       uiBaseUrl={dashboard?.status.daemon.uiBaseUrl ?? null}
       startedAt={dashboard?.status.daemon.startedAt ?? new Date().toISOString()}
       refreshing={refreshing}
+      daemonActionState={daemonActionState}
       onRefresh={() => {
         void refreshDashboard(selectedSessionId);
+      }}
+      onStopDaemon={() => {
+        void handleStopDaemon();
+      }}
+      onRestartDaemon={() => {
+        void handleRestartDaemon();
       }}
     >
       {error ? (

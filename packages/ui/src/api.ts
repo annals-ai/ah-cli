@@ -137,6 +137,12 @@ export interface DaemonStatusResponse {
   };
 }
 
+export interface DaemonActionResponse {
+  ok: boolean;
+  action: 'stop' | 'restart';
+  uiBaseUrl: string | null;
+}
+
 export interface DashboardData {
   status: DaemonStatusResponse;
   agents: AgentRecord[];
@@ -234,6 +240,14 @@ export async function createTaskGroup(input: TaskMutationInput): Promise<TaskRec
 export async function archiveTaskGroup(taskGroupId: string): Promise<TaskRecord> {
   const response = await postJson<{ taskGroup: TaskRecord }>(`/api/tasks/${taskGroupId}/archive`, {});
   return response.taskGroup;
+}
+
+export async function stopDaemon(): Promise<DaemonActionResponse> {
+  return postJson<DaemonActionResponse>('/api/daemon/stop', {});
+}
+
+export async function restartDaemon(): Promise<DaemonActionResponse> {
+  return postJson<DaemonActionResponse>('/api/daemon/restart', {});
 }
 
 export async function createAgent(input: AgentMutationInput): Promise<AgentRecord> {

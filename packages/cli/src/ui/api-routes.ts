@@ -19,6 +19,8 @@ interface UiApiRoutesOptions {
   startedAt: string;
   getUiBaseUrl(): string | null;
   getUiPort(): number | null;
+  requestStop(): void;
+  requestRestart(): void;
 }
 
 function writeJson(response: Parameters<UiHttpRequestHandler>[0]['response'], status: number, payload: unknown): void {
@@ -194,6 +196,32 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           session: snapshot.session,
           messages: snapshot.messages,
           result: result.result,
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 3 && segments[1] === 'daemon' && segments[2] === 'stop') {
+        const uiBaseUrl = options.getUiBaseUrl();
+        writeJson(response, 202, {
+          ok: true,
+          action: 'stop',
+          uiBaseUrl,
+        });
+        queueMicrotask(() => {
+          options.requestStop();
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 3 && segments[1] === 'daemon' && segments[2] === 'restart') {
+        const uiBaseUrl = options.getUiBaseUrl();
+        writeJson(response, 202, {
+          ok: true,
+          action: 'restart',
+          uiBaseUrl,
+        });
+        queueMicrotask(() => {
+          options.requestRestart();
         });
         return true;
       }

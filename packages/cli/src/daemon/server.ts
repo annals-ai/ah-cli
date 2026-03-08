@@ -22,11 +22,16 @@ import { shutdownProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
 import { createUiApiHandler } from '../ui/api-routes.js';
 import { startUiHttpServer, type UiHttpServerHandle } from '../ui/http-server.js';
+import { removeDaemonPid, scheduleDaemonRestartFromCurrentProcess } from './process.js';
 
 interface AgentMeshDaemonServerOptions {
   dbPath?: string;
   uiHost?: string;
   uiPort?: number;
+  uiControlHooks?: {
+    stop?: () => void | Promise<void>;
+    restart?: () => void | Promise<void>;
+  };
 }
 
 interface DaemonListenAddress {
@@ -58,6 +63,7 @@ export class AgentMeshDaemonServer {
   private readonly dbPath: string;
   private readonly preferredUiHost: string;
   private readonly preferredUiPort: number;
+  private readonly uiControlHooks: AgentMeshDaemonServerOptions['uiControlHooks'];
   private socketServer: NetServer | null = null;
   private socketPath: string | null = null;
   private uiServer: UiHttpServerHandle | null = null;
@@ -81,6 +87,7 @@ export class AgentMeshDaemonServer {
     this.dbPath = options.dbPath ?? getDaemonDbPath();
     this.preferredUiHost = options.uiHost ?? getDaemonUiHost();
     this.preferredUiPort = options.uiPort ?? getDaemonUiDefaultPort();
+    this.uiControlHooks = options.uiControlHooks;
     this.store = new DaemonStore(this.dbPath);
     this.runtime = new DaemonRuntime(this.store);
   }
@@ -136,6 +143,8 @@ export class AgentMeshDaemonServer {
         startedAt: this.startedAt,
         getUiBaseUrl: () => this.uiBaseUrl,
         getUiPort: () => this.uiPort,
+        requestStop: () => this.requestUiStop(),
+        requestRestart: () => this.requestUiRestart(),
       }),
     });
     this.uiBaseUrl = this.uiServer.baseUrl;
@@ -187,6 +196,40 @@ export class AgentMeshDaemonServer {
     process.off('SIGTERM', this.handleProcessSignal);
     process.off('SIGINT', this.handleProcessSignal);
     this.signalHandlersRegistered = false;
+  }
+
+  private requestUiStop(): void {
+    if (this.uiControlHooks?.stop) {
+      void Promise.resolve(this.uiControlHooks.stop());
+      return;
+    }
+
+    setTimeout(() => {
+      void this.close()
+        .catch((error) => {
+          log.warn(`Failed to stop daemon from local UI: ${(error as Error).message}`);
+        })
+        .finally(() => {
+          removeDaemonPid();
+          process.exit(0);
+        });
+    }, 150);
+  }
+
+  private requestUiRestart(): void {
+    if (this.uiControlHooks?.restart) {
+      void Promise.resolve(this.uiControlHooks.restart());
+      return;
+    }
+
+    try {
+      scheduleDaemonRestartFromCurrentProcess();
+    } catch (error) {
+      log.warn(`Failed to schedule daemon restart from local UI: ${(error as Error).message}`);
+      return;
+    }
+
+    this.requestUiStop();
   }
 
   private async closeInternal(): Promise<void> {

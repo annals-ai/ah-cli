@@ -1,8 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentMeshDaemonServer } from '../../packages/cli/src/daemon/server.js';
+
+async function postJson<T>(url: string, body: Record<string, unknown>): Promise<{ status: number; data: T }> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return {
+    status: response.status,
+    data: await response.json() as T,
+  };
+}
 
 describe('AgentMeshDaemonServer UI', () => {
   let tempDir: string;
@@ -28,5 +43,46 @@ describe('AgentMeshDaemonServer UI', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(address.uiPort).toBeGreaterThan(0);
+  });
+
+  it('routes daemon stop and restart actions through the local ui api', async () => {
+    const stopHook = vi.fn();
+    const restartHook = vi.fn();
+
+    server = new AgentMeshDaemonServer({
+      dbPath: join(tempDir, 'state.db'),
+      uiControlHooks: {
+        stop: stopHook,
+        restart: restartHook,
+      },
+    });
+
+    const address = await server.listenForTest();
+
+    const stopped = await postJson<{ ok: boolean; action: string; uiBaseUrl: string | null }>(
+      `${address.uiBaseUrl}/api/daemon/stop`,
+      {},
+    );
+    const restarted = await postJson<{ ok: boolean; action: string; uiBaseUrl: string | null }>(
+      `${address.uiBaseUrl}/api/daemon/restart`,
+      {},
+    );
+
+    await Promise.resolve();
+
+    expect(stopped.status).toBe(202);
+    expect(stopped.data).toEqual({
+      ok: true,
+      action: 'stop',
+      uiBaseUrl: address.uiBaseUrl,
+    });
+    expect(restarted.status).toBe(202);
+    expect(restarted.data).toEqual({
+      ok: true,
+      action: 'restart',
+      uiBaseUrl: address.uiBaseUrl,
+    });
+    expect(stopHook).toHaveBeenCalledTimes(1);
+    expect(restartHook).toHaveBeenCalledTimes(1);
   });
 });
