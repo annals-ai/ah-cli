@@ -93,6 +93,15 @@ export interface ProviderRecord extends ProviderBinding {
   agent: AgentRecord | null;
 }
 
+export interface RuntimeChatInput {
+  agentRef?: string;
+  sessionId?: string;
+  taskGroupId?: string;
+  title?: string;
+  tags?: string[];
+  message: string;
+}
+
 export interface DaemonStatusResponse {
   daemon: {
     pid: number;
@@ -202,6 +211,12 @@ export async function forkSession(sessionId: string, title?: string): Promise<{ 
   return postJson<{ session: SessionRecord; messages: SessionMessage[] }>(`/api/sessions/${sessionId}/fork`, {
     title,
   });
+}
+
+export async function sendLocalChatTurn(
+  input: RuntimeChatInput,
+): Promise<{ session: SessionRecord; messages: SessionMessage[]; result: string }> {
+  return postJson<{ session: SessionRecord; messages: SessionMessage[]; result: string }>('/api/runtime/chat', input);
 }
 
 export async function createAgent(input: AgentMutationInput): Promise<AgentRecord> {

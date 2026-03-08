@@ -122,6 +122,97 @@ describe('AgentMeshDaemonServer UI API', () => {
     expect(fork.session.title).toBe('Experiment');
   });
 
+  it('creates and continues sessions through the ui api chat endpoint', async () => {
+    const store = new DaemonStore(dbPath);
+    const agent = store.createAgent({
+      name: 'Operator Agent',
+      projectPath: '/tmp/operator-agent',
+      capabilities: ['ops'],
+    });
+    const task = store.createTaskGroup({
+      title: 'Incident review',
+      source: 'ui',
+    });
+    store.close();
+
+    server = new AgentMeshDaemonServer({ dbPath, uiPort: 0 });
+    const address = await server.listenForTest();
+
+    const runtime = (server as any).runtime;
+    const serverStore = (server as any).store as DaemonStore;
+
+    runtime.execute = async (input: {
+      agentRef?: string;
+      sessionId?: string;
+      message: string;
+      taskGroupId?: string;
+      mode: 'chat' | 'call';
+    }) => {
+      const resolvedAgent = input.sessionId
+        ? serverStore.getAgentById(serverStore.getSession(input.sessionId)!.agentId)!
+        : serverStore.resolveAgentRef(input.agentRef!)!;
+      const currentSession = input.sessionId
+        ? serverStore.getSession(input.sessionId)!
+        : serverStore.createSession({
+            agentId: resolvedAgent.id,
+            taskGroupId: input.taskGroupId,
+            title: input.message,
+            status: 'idle',
+          });
+
+      serverStore.appendMessage({
+        sessionId: currentSession.id,
+        role: 'user',
+        kind: input.mode,
+        content: input.message,
+      });
+      serverStore.appendMessage({
+        sessionId: currentSession.id,
+        role: 'assistant',
+        kind: input.mode,
+        content: `Echo: ${input.message}`,
+      });
+
+      return {
+        session: serverStore.getSession(currentSession.id)!,
+        agent: resolvedAgent,
+        result: `Echo: ${input.message}`,
+      };
+    };
+
+    const created = await postJson<{ session: { id: string; taskGroupId: string | null }; messages: Array<{ content: string }> }>(
+      `${address.uiBaseUrl}/api/runtime/chat`,
+      {
+        agentRef: agent.slug,
+        taskGroupId: task.id,
+        message: 'Draft the initial incident summary.',
+      },
+    );
+
+    const continued = await postJson<{ session: { id: string }; messages: Array<{ content: string }> }>(
+      `${address.uiBaseUrl}/api/runtime/chat`,
+      {
+        sessionId: created.session.id,
+        message: 'Add the next remediation step.',
+      },
+    );
+
+    const messages = await fetchJson<{ items: Array<{ content: string }> }>(
+      `${address.uiBaseUrl}/api/sessions/${created.session.id}/messages`,
+    );
+
+    expect(created.session.taskGroupId).toBe(task.id);
+    expect(continued.session.id).toBe(created.session.id);
+    expect(created.messages.at(-1)?.content).toBe('Echo: Draft the initial incident summary.');
+    expect(continued.messages.at(-1)?.content).toBe('Echo: Add the next remediation step.');
+    expect(messages.items.map((message) => message.content)).toEqual([
+      'Draft the initial incident summary.',
+      'Echo: Draft the initial incident summary.',
+      'Add the next remediation step.',
+      'Echo: Add the next remediation step.',
+    ]);
+  });
+
   it('creates, updates, removes, and exposes agents through the ui api', async () => {
     server = new AgentMeshDaemonServer({ dbPath, uiPort: 0 });
     const address = await server.listenForTest();

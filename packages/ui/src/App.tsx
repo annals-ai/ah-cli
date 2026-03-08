@@ -7,6 +7,7 @@ import {
   getDashboardData,
   getSessionMessages,
   removeAgent,
+  sendLocalChatTurn,
   stopSession,
   unexposeAgent,
   updateAgent,
@@ -50,7 +51,10 @@ export default function App() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
-  const [actionState, setActionState] = useState<'stop' | 'archive' | 'fork' | null>(null);
+  const [composerMessage, setComposerMessage] = useState('');
+  const [composerAgentId, setComposerAgentId] = useState('');
+  const [composerTaskGroupId, setComposerTaskGroupId] = useState('none');
+  const [actionState, setActionState] = useState<'stop' | 'archive' | 'fork' | 'send' | null>(null);
 
   async function refreshDashboard(preferredSessionId?: string | null): Promise<void> {
     setRefreshing(true);
@@ -124,6 +128,9 @@ export default function App() {
   }, [selectedSessionId]);
 
   const selectedSession = filteredSessions.find((session) => session.id === selectedSessionId) ?? null;
+  const draftAgentId = selectedSession
+    ? selectedSession.agentId
+    : composerAgentId || (filters.agentId !== 'all' ? filters.agentId : dashboard?.agents[0]?.id ?? '');
 
   async function handleStop(): Promise<void> {
     if (!selectedSession) return;
@@ -195,6 +202,48 @@ export default function App() {
     await refreshDashboard(selectedSessionId);
   }
 
+  async function handleSendMessage(): Promise<void> {
+    const message = composerMessage.trim();
+    if (!message) return;
+
+    if (!selectedSession && !draftAgentId) {
+      setError(t('transcript.selectAgentRequired'));
+      return;
+    }
+
+    const draftTaskGroupId = !selectedSession && composerTaskGroupId !== 'none' ? composerTaskGroupId : undefined;
+
+    setActionState('send');
+    setError(null);
+
+    try {
+      if (!selectedSession && draftAgentId) {
+        setFilters((current) => ({
+          ...current,
+          agentId: draftAgentId,
+          taskGroupId: draftTaskGroupId ?? 'all',
+          status: 'all',
+        }));
+      }
+
+      const result = await sendLocalChatTurn({
+        agentRef: selectedSession ? undefined : draftAgentId,
+        sessionId: selectedSession?.id ?? undefined,
+        taskGroupId: draftTaskGroupId,
+        message,
+      });
+
+      setComposerMessage('');
+      setSelectedSessionId(result.session.id);
+      setMessages(result.messages);
+      await refreshDashboard(result.session.id);
+    } catch (nextError) {
+      setError((nextError as Error).message);
+    } finally {
+      setActionState(null);
+    }
+  }
+
   return (
     <AppShell
       uiBaseUrl={dashboard?.status.daemon.uiBaseUrl ?? null}
@@ -256,13 +305,21 @@ export default function App() {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
             <TranscriptPanel
+              agents={dashboard.agents}
+              tasks={dashboard.tasks}
               session={selectedSession}
               messages={messages}
               loading={messagesLoading}
               error={messageError}
               actionState={actionState}
               forkTitle={forkTitle}
+              composerAgentId={draftAgentId}
+              composerTaskGroupId={composerTaskGroupId}
+              composerMessage={composerMessage}
               onForkTitleChange={setForkTitle}
+              onComposerAgentChange={setComposerAgentId}
+              onComposerTaskGroupChange={setComposerTaskGroupId}
+              onComposerMessageChange={setComposerMessage}
               onStop={() => {
                 void handleStop();
               }}
@@ -271,6 +328,9 @@ export default function App() {
               }}
               onFork={() => {
                 void handleFork();
+              }}
+              onSendMessage={() => {
+                void handleSendMessage();
               }}
             />
 

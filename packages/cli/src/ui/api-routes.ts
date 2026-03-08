@@ -106,6 +106,21 @@ function serializeSession(
   };
 }
 
+function serializeSessionSnapshot(options: UiApiRoutesOptions, sessionId: string): {
+  session: SessionRecord & { agent: DaemonAgent | null };
+  messages: ReturnType<DaemonStore['getSessionMessages']>;
+} {
+  const snapshot = options.store.getSessionSnapshot(sessionId);
+  if (!snapshot) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+
+  return {
+    session: serializeSession(snapshot.session, options.store.getAgentById(snapshot.session.agentId)),
+    messages: snapshot.messages,
+  };
+}
+
 export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHandler {
   return async ({ method, pathname, searchParams, response, request }) => {
     if (!pathname.startsWith('/api/')) {
@@ -143,6 +158,42 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         writeJson(response, 200, {
           session: serializeSession(snapshot.session, options.store.getAgentById(snapshot.session.agentId)),
           messages: snapshot.messages,
+        });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 3 && segments[1] === 'runtime' && segments[2] === 'chat') {
+        const body = await readJsonBody(request);
+        const sessionId = typeof body.sessionId === 'string' && body.sessionId.trim().length > 0
+          ? body.sessionId.trim()
+          : undefined;
+        const agentRef = typeof body.agentRef === 'string' && body.agentRef.trim().length > 0
+          ? body.agentRef.trim()
+          : undefined;
+
+        if (!sessionId && !agentRef) {
+          throw new Error('sessionId or agentRef is required');
+        }
+
+        const result = await options.runtime.execute({
+          agentRef,
+          sessionId,
+          message: expectNonEmptyString(body.message, 'message'),
+          taskGroupId: typeof body.taskGroupId === 'string' && body.taskGroupId.trim().length > 0
+            ? body.taskGroupId.trim()
+            : undefined,
+          title: typeof body.title === 'string' ? body.title : undefined,
+          tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)) : undefined,
+          mode: 'chat',
+          principalType: 'owner_local',
+          principalId: 'owner',
+        }, () => {});
+        const snapshot = serializeSessionSnapshot(options, result.session.id);
+
+        writeJson(response, 200, {
+          session: snapshot.session,
+          messages: snapshot.messages,
+          result: result.result,
         });
         return true;
       }
