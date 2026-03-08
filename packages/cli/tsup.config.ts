@@ -10,6 +10,7 @@ export default defineConfig({
   dts: true,
   external: ['node:sqlite'],
   noExternal: ['@annals/bridge-protocol'],
+  onSuccess: 'pnpm run build:ui-assets',
   banner: {
     js: '#!/usr/bin/env node',
   },

@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:ui-assets": "node ./scripts/copy-ui-assets.mjs",
     "dev": "tsup --watch"
   },
   "dependencies": {

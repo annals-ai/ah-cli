@@ -2,7 +2,7 @@
   "name": "agent-mesh",
   "private": true,
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @annals/agent-mesh-ui build && pnpm -r --filter=!@annals/agent-mesh-ui build",
     "test": "vitest run",
     "lint": "eslint packages/*/src/**/*.ts"
   },

@@ -23,10 +23,12 @@ const CONTENT_TYPES: Record<string, string> = {
 function getCandidateUiAssetDirs(): string[] {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   return [
+    resolve(moduleDir, 'ui-assets'),
     resolve(moduleDir, '../ui-assets'),
     resolve(moduleDir, '../../ui-assets'),
     resolve(moduleDir, '../../../ui/dist'),
     resolve(process.cwd(), 'packages/ui/dist'),
+    resolve(process.cwd(), 'packages/cli/dist/ui-assets'),
   ];
 }
 

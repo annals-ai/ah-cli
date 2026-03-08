@@ -1,0 +1,62 @@
+:root {
+  color: #1d140f;
+  background:
+    radial-gradient(circle at top left, rgba(166, 33, 20, 0.14), transparent 32rem),
+    linear-gradient(180deg, #f7f1e7 0%, #efe5d5 100%);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.app-frame {
+  width: min(100%, 52rem);
+  padding: clamp(2rem, 5vw, 4rem);
+  border: 1px solid rgba(43, 28, 20, 0.12);
+  background: rgba(252, 248, 242, 0.82);
+  box-shadow: 0 24px 60px rgba(76, 43, 24, 0.08);
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #a62114;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 8vw, 4.8rem);
+  line-height: 0.95;
+  max-width: 12ch;
+}
+
+.lede {
+  margin: 1.5rem 0 0;
+  max-width: 42rem;
+  font-size: 1.05rem;
+  color: rgba(29, 20, 15, 0.8);
+}
