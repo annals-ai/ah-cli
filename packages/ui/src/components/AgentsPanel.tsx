@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AgentMutationInput, AgentRecord, ProviderBinding } from '../api';
+import type { AgentMutationInput, AgentRecord } from '../api';
 import { Bot, FolderTree, Lock, Pencil, PlugZap, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import { ProviderBindingDialog } from '@/components/ProviderBindingDialog';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/lib/i18n';
@@ -35,11 +36,6 @@ interface AgentFormState {
   description: string;
   capabilitiesText: string;
   visibility: AgentMutationInput['visibility'];
-}
-
-interface ProviderDialogState {
-  agent: AgentRecord;
-  provider?: string;
 }
 
 const DEFAULT_AGENT_FORM: AgentFormState = {
@@ -75,36 +71,6 @@ function parseCapabilities(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function providerConfigTemplate(provider: string, visibility: AgentRecord['visibility'], current?: ProviderBinding): string {
-  if (current) {
-    return JSON.stringify(current.config, null, 2);
-  }
-
-  if (provider === 'generic-a2a') {
-    return JSON.stringify(
-      visibility === 'public'
-        ? {}
-        : {
-            bearerToken: 'change-me',
-          },
-      null,
-      2,
-    );
-  }
-
-  if (provider === 'agents-hot') {
-    return JSON.stringify(
-      {
-        bridgeUrl: 'wss://bridge.agents.hot/ws',
-      },
-      null,
-      2,
-    );
-  }
-
-  return '{}';
 }
 
 function AgentFormDialog({
@@ -253,113 +219,6 @@ function AgentFormDialog({
   );
 }
 
-function ProviderBindingDialog({
-  state,
-  open,
-  providers,
-  onOpenChange,
-  onSubmit,
-}: {
-  state: ProviderDialogState | null;
-  open: boolean;
-  providers: string[];
-  onOpenChange(open: boolean): void;
-  onSubmit(agentRef: string, provider: string, config: Record<string, unknown>): Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [provider, setProvider] = useState('');
-  const [configText, setConfigText] = useState('{}');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !state) return;
-    const nextProvider = state.provider ?? state.agent.bindings[0]?.provider ?? providers[0] ?? '';
-    setProvider(nextProvider);
-    setConfigText(providerConfigTemplate(nextProvider, state.agent.visibility, state.agent.bindings.find((binding) => binding.provider === nextProvider)));
-    setError(null);
-  }, [open, providers, state]);
-
-  useEffect(() => {
-    if (!open || !state || !provider) return;
-    setConfigText(providerConfigTemplate(provider, state.agent.visibility, state.agent.bindings.find((binding) => binding.provider === provider)));
-  }, [open, provider, state]);
-
-  async function handleSubmit(): Promise<void> {
-    if (!state || !provider) {
-      setError(t('agents.chooseProvider'));
-      return;
-    }
-
-    let parsedConfig: Record<string, unknown>;
-    try {
-      const parsed = JSON.parse(configText || '{}') as unknown;
-      parsedConfig = typeof parsed === 'object' && parsed ? parsed as Record<string, unknown> : {};
-    } catch {
-      setError(t('agents.invalidConfigJson'));
-      return;
-    }
-
-    setPending(true);
-    setError(null);
-
-    try {
-      await onSubmit(state.agent.id, provider, parsedConfig);
-      onOpenChange(false);
-    } catch (nextError) {
-      setError((nextError as Error).message);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('agents.exposeTitle')}</DialogTitle>
-          <DialogDescription>
-            {t('agents.exposeDescription', { agent: state?.agent.name ?? 'this agent' })}
-          </DialogDescription>
-        </DialogHeader>
-
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">{t('common.provider')}</span>
-          <NativeSelect value={provider} onChange={(event) => setProvider(event.target.value)} disabled={providers.length === 0}>
-            {providers.length === 0 ? <option value="">{t('common.noProvidersAvailable')}</option> : null}
-              {providers.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-          </NativeSelect>
-        </label>
-
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">{t('common.configJson')}</span>
-          <Textarea
-            value={configText}
-            onChange={(event) => setConfigText(event.target.value)}
-            className="min-h-56 font-mono text-xs"
-            spellCheck={false}
-          />
-        </label>
-
-        {error ? <p className="text-destructive text-sm">{error}</p> : null}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={() => void handleSubmit()} disabled={pending || !provider}>
-            {pending ? t('common.saving') : t('common.saveBinding')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function AgentsPanel({
   agents,
   providerOptions,
@@ -374,7 +233,7 @@ export function AgentsPanel({
   const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
-  const [providerState, setProviderState] = useState<ProviderDialogState | null>(null);
+  const [providerState, setProviderState] = useState<{ agentId: string; provider?: string } | null>(null);
 
   async function handleAgentSubmit(ref: string | null, input: AgentMutationInput): Promise<void> {
     if (ref) {
@@ -500,7 +359,7 @@ export function AgentsPanel({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setProviderState({ agent })}
+                        onClick={() => setProviderState({ agentId: agent.id })}
                       >
                         <PlugZap className="size-4" />
                         {t('common.expose')}
@@ -532,7 +391,7 @@ export function AgentsPanel({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setProviderState({ agent, provider: binding.provider })}
+                                onClick={() => setProviderState({ agentId: agent.id, provider: binding.provider })}
                               >
                                 {t('common.configure')}
                               </Button>
@@ -575,9 +434,18 @@ export function AgentsPanel({
       />
 
       <ProviderBindingDialog
-        state={providerState}
         open={Boolean(providerState)}
+        draft={providerState}
+        agents={agents}
         providers={providerOptions}
+        allowAgentChange={false}
+        description={
+          providerState
+            ? t('agents.exposeDescription', {
+                agent: agents.find((agent) => agent.id === providerState.agentId)?.name ?? t('common.agent'),
+              })
+            : undefined
+        }
         onOpenChange={(open) => {
           if (!open) setProviderState(null);
         }}

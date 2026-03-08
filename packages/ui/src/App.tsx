@@ -549,7 +549,13 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="exposure" className="mt-0">
-            <ExposurePanel providers={dashboard.providers} />
+            <ExposurePanel
+              agents={dashboard.agents}
+              providers={dashboard.providers}
+              providerOptions={dashboard.providerCatalog}
+              onExposeAgent={handleExposeAgent}
+              onUnexposeAgent={handleUnexposeAgent}
+            />
           </TabsContent>
 
           <TabsContent value="logs" className="mt-0">
