@@ -5,6 +5,8 @@ import { join } from 'node:path';
 const ROOT_DIR = join(homedir(), '.agent-mesh');
 const DAEMON_DIR = join(ROOT_DIR, 'daemon');
 const LOG_DIR = join(DAEMON_DIR, 'logs');
+const DAEMON_UI_HOST = '127.0.0.1';
+const DAEMON_UI_DEFAULT_PORT = 4848;
 
 function ensureDir(path: string): string {
   if (!existsSync(path)) {
@@ -47,4 +49,12 @@ export function getDaemonPidPath(): string {
 export function getDaemonLogPath(): string {
   ensureDaemonDirs();
   return join(LOG_DIR, 'daemon.log');
+}
+
+export function getDaemonUiHost(): string {
+  return DAEMON_UI_HOST;
+}
+
+export function getDaemonUiDefaultPort(): number {
+  return DAEMON_UI_DEFAULT_PORT;
 }

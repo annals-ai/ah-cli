@@ -1,12 +1,31 @@
-import { createServer, type Socket } from 'node:net';
-import { createInterface } from 'node:readline';
+import { createServer, type Server as NetServer, type Socket } from 'node:net';
 import { unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { DaemonRuntime } from './runtime.js';
-import { getDaemonSocketPath } from './paths.js';
+import {
+  getDaemonDbPath,
+  getDaemonSocketPath,
+  getDaemonUiDefaultPort,
+  getDaemonUiHost,
+} from './paths.js';
 import { DaemonStore } from './store.js';
 import type { DaemonEnvelope, DaemonRequest } from './protocol.js';
 import { getProvider, shutdownProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
+import { startUiHttpServer, type UiHttpServerHandle } from '../ui/http-server.js';
+
+interface AgentMeshDaemonServerOptions {
+  dbPath?: string;
+  uiHost?: string;
+  uiPort?: number;
+}
+
+interface DaemonListenAddress {
+  socketPath: string;
+  uiBaseUrl: string;
+  uiPort: number;
+}
 
 function respond(socket: Socket, payload: DaemonEnvelope): void {
   socket.write(JSON.stringify(payload) + '\n');
@@ -25,15 +44,88 @@ function normalizeTags(value: unknown): string[] {
 }
 
 export class AgentMeshDaemonServer {
-  private readonly store = new DaemonStore();
-  private readonly runtime = new DaemonRuntime(this.store);
+  private readonly store: DaemonStore;
+  private readonly runtime: DaemonRuntime;
   private readonly startedAt = new Date().toISOString();
-  private shuttingDown = false;
+  private readonly dbPath: string;
+  private readonly preferredUiHost: string;
+  private readonly preferredUiPort: number;
+  private socketServer: NetServer | null = null;
+  private socketPath: string | null = null;
+  private uiServer: UiHttpServerHandle | null = null;
+  private uiBaseUrl: string | null = null;
+  private uiPort: number | null = null;
+  private signalHandlersRegistered = false;
+  private closed = false;
+  private closing: Promise<void> | null = null;
+
+  private readonly handleProcessSignal = (): void => {
+    void this.close()
+      .catch((error) => {
+        log.warn(`Failed to stop daemon cleanly: ${(error as Error).message}`);
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+
+  constructor(options: AgentMeshDaemonServerOptions = {}) {
+    this.dbPath = options.dbPath ?? getDaemonDbPath();
+    this.preferredUiHost = options.uiHost ?? getDaemonUiHost();
+    this.preferredUiPort = options.uiPort ?? getDaemonUiDefaultPort();
+    this.store = new DaemonStore(this.dbPath);
+    this.runtime = new DaemonRuntime(this.store);
+  }
 
   async listen(socketPath = getDaemonSocketPath()): Promise<void> {
+    await this.start(socketPath, true);
+  }
+
+  async listenForTest(socketPath = this.getTestSocketPath()): Promise<DaemonListenAddress> {
+    await this.start(socketPath, false);
+    return {
+      socketPath,
+      uiBaseUrl: this.uiBaseUrl!,
+      uiPort: this.uiPort!,
+    };
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return;
+    if (this.closing) return this.closing;
+
+    this.closing = this.closeInternal().finally(() => {
+      this.closed = true;
+      this.closing = null;
+    });
+
+    return this.closing;
+  }
+
+  private getTestSocketPath(): string {
+    return join(dirname(this.dbPath), 'daemon.sock');
+  }
+
+  private async start(socketPath: string, registerSignalHandlers: boolean): Promise<void> {
+    if (this.closed) {
+      throw new Error('Agent mesh daemon server has already been closed.');
+    }
+    if (this.socketServer || this.uiServer) {
+      return;
+    }
+
     try {
       unlinkSync(socketPath);
     } catch {}
+
+    this.socketPath = socketPath;
+    this.uiServer = await startUiHttpServer({
+      host: this.preferredUiHost,
+      preferredPort: this.preferredUiPort,
+    });
+    this.uiBaseUrl = this.uiServer.baseUrl;
+    this.uiPort = this.uiServer.port;
+    this.store.setDaemonSetting('ui.last_port', { value: this.uiPort });
 
     const server = createServer((socket) => {
       const rl = createInterface({ input: socket });
@@ -43,34 +135,80 @@ export class AgentMeshDaemonServer {
       });
     });
 
-    const shutdown = () => {
-      if (this.shuttingDown) return;
-      this.shuttingDown = true;
-      server.close(() => {
-        void shutdownProviders()
-          .catch((error) => {
-            log.warn(`Failed to stop provider ingress cleanly: ${error}`);
-          })
-          .finally(() => {
-            this.store.close();
-            try {
-              unlinkSync(socketPath);
-            } catch {}
-            process.exit(0);
-          });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(socketPath, () => resolve());
       });
-    };
+    } catch (error) {
+      await this.uiServer.close();
+      this.uiServer = null;
+      this.uiBaseUrl = null;
+      this.uiPort = null;
+      this.socketPath = null;
+      throw error;
+    }
 
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
+    this.socketServer = server;
 
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(socketPath, () => resolve());
-    });
+    if (registerSignalHandlers) {
+      this.registerSignalHandlers();
+    }
 
     log.info(`agent-mesh daemon listening on ${socketPath}`);
+    log.info(`agent-mesh local ui listening on ${this.uiBaseUrl}`);
     void this.restoreProviderIngresses();
+  }
+
+  private registerSignalHandlers(): void {
+    if (this.signalHandlersRegistered) return;
+    process.on('SIGTERM', this.handleProcessSignal);
+    process.on('SIGINT', this.handleProcessSignal);
+    this.signalHandlersRegistered = true;
+  }
+
+  private unregisterSignalHandlers(): void {
+    if (!this.signalHandlersRegistered) return;
+    process.off('SIGTERM', this.handleProcessSignal);
+    process.off('SIGINT', this.handleProcessSignal);
+    this.signalHandlersRegistered = false;
+  }
+
+  private async closeInternal(): Promise<void> {
+    this.unregisterSignalHandlers();
+
+    const socketServer = this.socketServer;
+    const uiServer = this.uiServer;
+    const socketPath = this.socketPath;
+
+    this.socketServer = null;
+    this.uiServer = null;
+    this.socketPath = null;
+    this.uiBaseUrl = null;
+    this.uiPort = null;
+
+    await Promise.all([
+      new Promise<void>((resolve) => {
+        if (!socketServer) {
+          resolve();
+          return;
+        }
+        socketServer.close(() => resolve());
+      }),
+      uiServer?.close() ?? Promise.resolve(),
+    ]);
+
+    await shutdownProviders().catch((error) => {
+      log.warn(`Failed to stop provider ingress cleanly: ${error}`);
+    });
+
+    this.store.close();
+
+    if (socketPath) {
+      try {
+        unlinkSync(socketPath);
+      } catch {}
+    }
   }
 
   private async handleLine(socket: Socket, line: string): Promise<void> {
@@ -120,6 +258,8 @@ export class AgentMeshDaemonServer {
         return {
           pid: process.pid,
           startedAt: this.startedAt,
+          uiBaseUrl: this.uiBaseUrl,
+          uiPort: this.uiPort,
           agents: this.store.listAgents().length,
           sessions: this.store.listSessions({ status: 'all' }).length,
           taskGroups: this.store.listTaskGroups().length,
@@ -218,7 +358,9 @@ export class AgentMeshDaemonServer {
           status: result.status,
           config: {
             ...(current?.config ?? {}),
-            ...(typeof request.params?.config === 'object' && request.params?.config ? request.params.config as Record<string, unknown> : {}),
+            ...(typeof request.params?.config === 'object' && request.params?.config
+              ? request.params.config as Record<string, unknown>
+              : {}),
             ...(result.config ?? {}),
           },
           lastSyncedAt: result.lastSyncedAt ?? new Date().toISOString(),
