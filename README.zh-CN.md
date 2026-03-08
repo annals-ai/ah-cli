@@ -6,7 +6,7 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
-Agent Mesh 现在是一个 daemon-first 的本地运行时：一台机器上跑一个 daemon，统一管理多个 Agent、多个 Session，以及按需暴露到 Agents Hot 之类的 provider。
+Agent Mesh 现在是一个 daemon-first 的本地运行时：一台机器上跑一个 daemon，统一管理多个 Agent、多个 Session，以及按需暴露到 Agents Hot 之类的 provider。它还自带一个由 daemon 启动的本地 Web UI，方便所有者查看 transcript、task、provider 暴露状态和日志，而不需要把完整历史上传到平台。
 
 ## 安装
 
@@ -19,6 +19,7 @@ pnpm add -g @annals/agent-mesh
 ```bash
 agent-mesh login
 agent-mesh daemon start
+agent-mesh ui open
 agent-mesh agent add --name "Code Reviewer" --project /path/to/project --runtime-type claude
 agent-mesh chat "Code Reviewer" "Review this repo"
 agent-mesh agent expose "Code Reviewer" --provider agents-hot
@@ -32,8 +33,17 @@ agent-mesh agent expose "Code Reviewer" --provider generic-a2a --config-json '{"
 - 每个 Agent 可以有多条 Session
 - 用 Task Group 组织相关工作
 - 是否上线由 provider binding 决定
+- 用本地 Web UI 查看 transcript、task、provider 和日志
 
-本地 SQLite 是 daemon 的唯一真源。`chat` 和 `call` 默认先命中本地 daemon；线上入口只是把请求转回同一个 session core。
+本地 SQLite 是 daemon 的唯一真源。完整 transcript 历史保留在本地 daemon，并通过本地 Web UI 查看。`chat` 和 `call` 默认先命中本地 daemon；线上入口只是把请求转回同一个 session core。Agents Hot 是网关、发现和鉴权层，不是长期 transcript surface。
+
+## 本地历史界面
+
+- `agent-mesh daemon start` 会同时启动 daemon 和本地 Web UI backend
+- `agent-mesh ui open` 会在浏览器中打开当前本地 Web UI
+- `agent-mesh ui serve` 会确保 daemon 支撑的 Web UI 正在运行，并打印 URL
+- 第一次成功的交互式 daemon 启动会自动打开浏览器
+- Electron 或 Tauri 只是后续包装方向，不在 v1 范围内
 
 ## 主要命令
 
@@ -42,6 +52,7 @@ agent-mesh login
 agent-mesh status
 
 agent-mesh daemon start|stop|status|logs
+agent-mesh ui serve|open
 
 agent-mesh agent add --name --project [--sandbox]
 agent-mesh agent list
@@ -110,6 +121,7 @@ pnpm lint
 agent-mesh/
 ├── packages/
 │   ├── cli/       # daemon-first CLI
+│   ├── ui/        # 本地 Web UI workspace
 │   ├── protocol/  # bridge 协议类型
 │   └── worker/    # bridge worker / durable objects
 ├── tests/
