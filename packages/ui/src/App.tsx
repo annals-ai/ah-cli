@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   archiveSession,
   createAgent,
@@ -56,15 +56,13 @@ export default function App() {
 
     try {
       const nextDashboard = await getDashboardData();
-      startTransition(() => {
-        setDashboard(nextDashboard);
-        setSelectedSessionId((current) => {
-          const candidate = preferredSessionId ?? current;
-          if (candidate && nextDashboard.sessions.some((session) => session.id === candidate)) {
-            return candidate;
-          }
-          return nextDashboard.sessions[0]?.id ?? null;
-        });
+      setDashboard(nextDashboard);
+      setSelectedSessionId((current) => {
+        const candidate = preferredSessionId ?? current;
+        if (candidate && nextDashboard.sessions.some((session) => session.id === candidate)) {
+          return candidate;
+        }
+        return nextDashboard.sessions[0]?.id ?? null;
       });
     } catch (nextError) {
       setError((nextError as Error).message);
@@ -113,9 +111,7 @@ export default function App() {
 
     void getSessionMessages(selectedSessionId)
       .then((nextMessages) => {
-        startTransition(() => {
-          setMessages(nextMessages);
-        });
+        setMessages(nextMessages);
       })
       .catch((nextError) => {
         setMessageError((nextError as Error).message);
@@ -161,11 +157,9 @@ export default function App() {
     setActionState('fork');
     try {
       const result = await forkSession(selectedSession.id, forkTitle.trim() || undefined);
-      startTransition(() => {
-        setForkTitle('');
-        setSelectedSessionId(result.session.id);
-        setMessages(result.messages);
-      });
+      setForkTitle('');
+      setSelectedSessionId(result.session.id);
+      setMessages(result.messages);
       await refreshDashboard(result.session.id);
     } catch (nextError) {
       setError((nextError as Error).message);

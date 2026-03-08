@@ -4,7 +4,7 @@ import { Funnel, History, Layers3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NativeSelect } from '@/components/ui/native-select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/utils';
 
@@ -63,19 +63,17 @@ export function SessionsPanel({
               <Funnel className="size-3.5" />
               Agent
             </span>
-            <Select value={filters.agentId} onValueChange={(agentId) => onFiltersChange({ ...filters, agentId })}>
-              <SelectTrigger>
-                <SelectValue placeholder="All agents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All agents</SelectItem>
+            <NativeSelect
+              value={filters.agentId}
+              onChange={(event) => onFiltersChange({ ...filters, agentId: event.target.value })}
+            >
+              <option value="all">All agents</option>
                 {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
+                  <option key={agent.id} value={agent.id}>
                     {agent.name}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+            </NativeSelect>
           </label>
 
           <label className="grid gap-2">
@@ -83,22 +81,17 @@ export function SessionsPanel({
               <Layers3 className="size-3.5" />
               Task group
             </span>
-            <Select
+            <NativeSelect
               value={filters.taskGroupId}
-              onValueChange={(taskGroupId) => onFiltersChange({ ...filters, taskGroupId })}
+              onChange={(event) => onFiltersChange({ ...filters, taskGroupId: event.target.value })}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="All task groups" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All task groups</SelectItem>
+              <option value="all">All task groups</option>
                 {tasks.map((task) => (
-                  <SelectItem key={task.id} value={task.id}>
+                  <option key={task.id} value={task.id}>
                     {task.title}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+            </NativeSelect>
           </label>
 
           <label className="grid gap-2">
@@ -106,21 +99,16 @@ export function SessionsPanel({
               <History className="size-3.5" />
               Status
             </span>
-            <Select
+            <NativeSelect
               value={filters.status}
-              onValueChange={(status) => onFiltersChange({ ...filters, status: status as SessionFilters['status'] })}
+              onChange={(event) => onFiltersChange({ ...filters, status: event.target.value as SessionFilters['status'] })}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
                 {STATUS_OPTIONS.map((status) => (
-                  <SelectItem key={status} value={status}>
+                  <option key={status} value={status}>
                     {status}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+            </NativeSelect>
           </label>
         </div>
 

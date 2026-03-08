@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NativeSelect } from '@/components/ui/native-select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -185,19 +185,16 @@ function AgentFormDialog({
           </label>
           <label className="grid gap-2">
             <span className="text-sm font-medium">Visibility</span>
-            <Select
+            <NativeSelect
               value={form.visibility}
-              onValueChange={(value) => setForm((current) => ({ ...current, visibility: value as AgentMutationInput['visibility'] }))}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, visibility: event.target.value as AgentMutationInput['visibility'] }))
+              }
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="public">public</SelectItem>
-                <SelectItem value="private">private</SelectItem>
-                <SelectItem value="unlisted">unlisted</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="public">public</option>
+              <option value="private">private</option>
+              <option value="unlisted">unlisted</option>
+            </NativeSelect>
           </label>
         </div>
 
@@ -325,18 +322,14 @@ function ProviderBindingDialog({
 
         <label className="grid gap-2">
           <span className="text-sm font-medium">Provider</span>
-          <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose provider" />
-            </SelectTrigger>
-            <SelectContent>
+          <NativeSelect value={provider} onChange={(event) => setProvider(event.target.value)} disabled={providers.length === 0}>
+            {providers.length === 0 ? <option value="">No providers available</option> : null}
               {providers.map((entry) => (
-                <SelectItem key={entry} value={entry}>
+                <option key={entry} value={entry}>
                   {entry}
-                </SelectItem>
+                </option>
               ))}
-            </SelectContent>
-          </Select>
+          </NativeSelect>
         </label>
 
         <label className="grid gap-2">
