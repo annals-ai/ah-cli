@@ -100,6 +100,8 @@ async function runLocalRuntime(method: 'runtime.chat' | 'runtime.call', opts: Lo
       }
 
       switch (runtimeEvent.type) {
+        case 'keepalive':
+          return; // Silently consumed — only resets client timeout
         case 'session':
           sessionId = runtimeEvent.session.id;
           process.stderr.write(

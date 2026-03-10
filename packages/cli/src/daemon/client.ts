@@ -34,12 +34,18 @@ export async function requestDaemon<T>(
     const socket = createConnection({ path: socketPath });
     let rl: Interface | null = null;
     let settled = false;
-    const timeout = setTimeout(() => {
-      settled = true;
-      rl?.close();
-      socket.destroy();
-      reject(new Error(`Timed out waiting for daemon response (${method})`));
-    }, options.timeoutMs ?? 30_000);
+    const timeoutMs = options.timeoutMs ?? (method.startsWith('runtime.') ? 10 * 60_000 : 30_000);
+    let timeout: ReturnType<typeof setTimeout>;
+    const armTimeout = (): void => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        settled = true;
+        rl?.close();
+        socket.destroy();
+        reject(new Error(`Timed out waiting for daemon response (${method})`));
+      }, timeoutMs);
+    };
+    armTimeout();
 
     const closeWithError = (error: Error): void => {
       if (settled) return;
@@ -67,6 +73,7 @@ export async function requestDaemon<T>(
         if (envelope.id !== requestId) return;
 
         if (envelope.type === 'event') {
+          armTimeout(); // Reset timeout on any event (including keepalive)
           options.onEvent?.(envelope.event);
           return;
         }

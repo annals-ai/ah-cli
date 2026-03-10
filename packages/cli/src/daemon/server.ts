@@ -524,28 +524,37 @@ export class AgentNetworkDaemonServer {
 
       case 'runtime.chat':
       case 'runtime.call': {
-        const result = await this.runtime.execute({
-          agentRef: typeof request.params?.agentRef === 'string' ? request.params.agentRef : undefined,
-          sessionId: typeof request.params?.sessionId === 'string' ? request.params.sessionId : undefined,
-          forkFromSessionId: typeof request.params?.forkFromSessionId === 'string' ? request.params.forkFromSessionId : undefined,
-          message: expectString(request.params?.message, 'message'),
-          mode: request.method === 'runtime.chat' ? 'chat' : 'call',
-          taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
-          title: typeof request.params?.title === 'string' ? request.params.title : undefined,
-          tags: normalizeTags(request.params?.tags),
-          principalType: 'owner_local',
-          principalId: 'owner',
-          withFiles: request.params?.withFiles === true,
-        }, emit);
-        return {
-          ...result,
-          completion: result.completion
-            ? {
-              attachments: result.completion.attachments,
-              fileTransferOffer: result.completion.fileTransferOffer,
-            }
-            : undefined,
-        };
+        // Send keepalive events every 15s to prevent client socket timeout
+        // during agent startup (Claude process spawn + first output can take minutes)
+        const keepalive = setInterval(() => {
+          emit({ type: 'keepalive' } as unknown as RuntimeStreamEvent);
+        }, 15_000);
+        try {
+          const result = await this.runtime.execute({
+            agentRef: typeof request.params?.agentRef === 'string' ? request.params.agentRef : undefined,
+            sessionId: typeof request.params?.sessionId === 'string' ? request.params.sessionId : undefined,
+            forkFromSessionId: typeof request.params?.forkFromSessionId === 'string' ? request.params.forkFromSessionId : undefined,
+            message: expectString(request.params?.message, 'message'),
+            mode: request.method === 'runtime.chat' ? 'chat' : 'call',
+            taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
+            title: typeof request.params?.title === 'string' ? request.params.title : undefined,
+            tags: normalizeTags(request.params?.tags),
+            principalType: 'owner_local',
+            principalId: 'owner',
+            withFiles: request.params?.withFiles === true,
+          }, emit);
+          return {
+            ...result,
+            completion: result.completion
+              ? {
+                attachments: result.completion.attachments,
+                fileTransferOffer: result.completion.fileTransferOffer,
+              }
+              : undefined,
+          };
+        } finally {
+          clearInterval(keepalive);
+        }
       }
 
       case 'runtime.fan-out': {
