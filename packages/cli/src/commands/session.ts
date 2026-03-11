@@ -41,7 +41,7 @@ export function registerSessionCommand(program: Command): void {
     .option('--search <text>', 'Search in session title')
     .option('--older-than <duration>', 'Filter sessions older than duration (e.g., 7d, 24h, 1w)')
     .option('--newer-than <duration>', 'Filter sessions newer than duration (e.g., 7d, 24h, 1w)')
-    .option('--sort <field>', 'Sort by field: created_at, updated_at, title (default: updated_at)')
+    .option('--sort <field>', 'Sort by field: created_at, updated_at, last_active_at, title (default: last_active_at)')
     .option('--limit <number>', 'Limit number of results', parseInt)
     .option('--json', 'Output JSON')
     .option('--short', 'Output only session IDs (one per line)')
@@ -103,8 +103,8 @@ export function registerSessionCommand(program: Command): void {
       }
 
       // Apply sorting
-      const sortField = opts.sort || 'updated_at';
-      const validSortFields = ['created_at', 'updated_at', 'title'];
+      const sortField = opts.sort || 'last_active_at';
+      const validSortFields = ['created_at', 'updated_at', 'last_active_at', 'title'];
       if (!validSortFields.includes(sortField)) {
         log.error(`Invalid --sort value: ${sortField}`);
         console.log(`  ${GRAY}Valid options: ${validSortFields.join(', ')}${RESET}`);
@@ -118,8 +118,10 @@ export function registerSessionCommand(program: Command): void {
           return titleA.localeCompare(titleB);
         } else if (sortField === 'created_at') {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } else if (sortField === 'last_active_at') {
+          return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
         } else {
-          // updated_at (default)
+          // updated_at (default fallback)
           return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         }
       });
