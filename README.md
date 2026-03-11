@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@annals/agent-network.svg)](https://www.npmjs.com/package/@annals/agent-network)
 [![npm downloads](https://img.shields.io/npm/dm/@annals/agent-network.svg)](https://www.npmjs.com/package/@annals/agent-network)
-[![license](https://img.shields.io/github/license/annals-ai/agent-network.svg)](./LICENSE)
+[![license](https://img.shields.io/github/license/annals-ai/ah-cli.svg)](./LICENSE)
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
@@ -216,8 +216,8 @@ ah agent expose "Code Reviewer" \
 
 ```bash
 # Clone the repository
-git clone https://github.com/annals-ai/agent-network.git
-cd agent-network
+git clone https://github.com/annals-ai/ah-cli.git
+cd ah-cli
 
 # Install dependencies
 pnpm install
@@ -235,7 +235,7 @@ pnpm lint
 ## Repository Structure
 
 ```
-agent-network/
+ah-cli/
 ├── packages/
 │   ├── cli/       # The ah CLI
 │   ├── ui/        # Local Web UI
