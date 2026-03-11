@@ -64,7 +64,12 @@ export function registerAgentCommand(program: Command): void {
     .command('list')
     .description('List local agents')
     .option('--json', 'Output JSON')
-    .action(async (opts: { json?: boolean }) => {
+    .option('-r, --runtime <type>', 'Filter by runtime type')
+    .option('-n, --name <pattern>', 'Filter by name (case-insensitive substring)')
+    .option('-v, --visibility <vis>', 'Filter by visibility (public|private|unlisted)')
+    .option('--sandboxed', 'Show only sandboxed agents')
+    .option('--exposed', 'Show only agents with active provider bindings')
+    .action(async (opts: { json?: boolean; runtime?: string; name?: string; visibility?: string; sandboxed?: boolean; exposed?: boolean }) => {
       await ensureDaemonRunning();
       const result = await requestDaemon<{
         agents: Array<{
@@ -79,14 +84,54 @@ export function registerAgentCommand(program: Command): void {
         bindings: Array<{ agentId: string; provider: string; status: string }>;
       }>('agent.list');
 
+      // Apply filters
+      let filteredAgents = result.agents;
+      
+      if (opts.runtime) {
+        filteredAgents = filteredAgents.filter((a) => 
+          a.runtimeType.toLowerCase() === opts.runtime!.toLowerCase()
+        );
+      }
+      
+      if (opts.name) {
+        const pattern = opts.name.toLowerCase();
+        filteredAgents = filteredAgents.filter((a) => 
+          a.name.toLowerCase().includes(pattern) || 
+          a.slug.toLowerCase().includes(pattern)
+        );
+      }
+      
+      if (opts.visibility) {
+        filteredAgents = filteredAgents.filter((a) => 
+          a.visibility.toLowerCase() === opts.visibility!.toLowerCase()
+        );
+      }
+      
+      if (opts.sandboxed) {
+        filteredAgents = filteredAgents.filter((a) => a.sandbox);
+      }
+      
+      if (opts.exposed) {
+        const exposedAgentIds = new Set(
+          result.bindings
+            .filter((b) => b.status === 'active')
+            .map((b) => b.agentId)
+        );
+        filteredAgents = filteredAgents.filter((a) => exposedAgentIds.has(a.id));
+      }
+
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        console.log(JSON.stringify({ agents: filteredAgents, bindings: result.bindings }, null, 2));
         return;
       }
 
-      if (result.agents.length === 0) {
-        log.info('No local agents registered.');
-        console.log(`\n  ${GRAY}Tip: Run 'ah agent add --name <name> --project <path>' to register an agent.${RESET}`);
+      if (filteredAgents.length === 0) {
+        if (result.agents.length === 0) {
+          log.info('No local agents registered.');
+          console.log(`\n  ${GRAY}Tip: Run 'ah agent add --name <name> --project <path>' to register an agent.${RESET}`);
+        } else {
+          log.info('No agents match the specified filters.');
+        }
         return;
       }
 
@@ -108,7 +153,7 @@ export function registerAgentCommand(program: Command): void {
       ];
 
       // Format rows
-      const rows = result.agents.map((agent) => {
+      const rows = filteredAgents.map((agent) => {
         const bindings = result.bindings.filter((binding) => binding.agentId === agent.id);
         const providerSummary = bindings.length > 0
           ? bindings.map((b) => {
@@ -142,11 +187,16 @@ export function registerAgentCommand(program: Command): void {
       console.log(renderTable(columns, rows));
 
       // Print summary
-      const sandboxCount = result.agents.filter((a) => a.sandbox).length;
-      const publicCount = result.agents.filter((a) => a.visibility === 'public').length;
+      const sandboxCount = filteredAgents.filter((a) => a.sandbox).length;
+      const publicCount = filteredAgents.filter((a) => a.visibility === 'public').length;
       const activeBindings = result.bindings.filter((b) => b.status === 'active').length;
+      const hasFilters = opts.runtime || opts.name || opts.visibility || opts.sandboxed || opts.exposed;
       console.log('');
-      console.log(`  ${GRAY}Total: ${result.agents.length} agents, ${sandboxCount} sandboxed, ${publicCount} public, ${activeBindings} active bindings${RESET}`);
+      if (hasFilters && filteredAgents.length !== result.agents.length) {
+        console.log(`  ${GRAY}Showing: ${filteredAgents.length} of ${result.agents.length} agents, ${sandboxCount} sandboxed, ${publicCount} public${RESET}`);
+      } else {
+        console.log(`  ${GRAY}Total: ${filteredAgents.length} agents, ${sandboxCount} sandboxed, ${publicCount} public, ${activeBindings} active bindings${RESET}`);
+      }
       console.log('');
     });
 
