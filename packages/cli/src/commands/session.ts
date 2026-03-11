@@ -17,13 +17,18 @@ export function registerSessionCommand(program: Command): void {
     .option('--agent <ref>', 'Filter by agent')
     .option('--task-group <id>', 'Filter by task group')
     .option('--status <status>', 'queued|active|idle|paused|completed|failed|archived|all', 'all')
+    .option('--active', 'Show only active/idle/paused sessions (shortcut for --status active,idle,paused)')
     .option('--tag <tag>', 'Filter by tag')
     .option('--search <text>', 'Search in session title')
     .option('--limit <number>', 'Limit number of results', parseInt)
     .option('--json', 'Output JSON')
     .option('--short', 'Output only session IDs (one per line)')
-    .action(async (opts: { agent?: string; taskGroup?: string; status: string; tag?: string; search?: string; limit?: number; json?: boolean; short?: boolean }) => {
+    .action(async (opts: { agent?: string; taskGroup?: string; status: string; active?: boolean; tag?: string; search?: string; limit?: number; json?: boolean; short?: boolean }) => {
       await ensureDaemonRunning();
+      
+      // --active is a shortcut for --status active,idle,paused
+      const statusFilter = opts.active ? 'active,idle,paused' : opts.status;
+      
       const result = await requestDaemon<{ sessions: Array<{
         id: string;
         title: string | null;
@@ -34,7 +39,7 @@ export function registerSessionCommand(program: Command): void {
       }> }>('session.list', {
         agentRef: opts.agent,
         taskGroupId: opts.taskGroup,
-        status: opts.status,
+        status: statusFilter,
         tag: opts.tag,
         search: opts.search,
         limit: opts.limit,
@@ -55,7 +60,8 @@ export function registerSessionCommand(program: Command): void {
         const filters = [];
         if (opts.agent) filters.push(`agent: ${opts.agent}`);
         if (opts.taskGroup) filters.push(`task-group: ${opts.taskGroup}`);
-        if (opts.status !== 'all') filters.push(`status: ${opts.status}`);
+        if (opts.active) filters.push(`status: active/idle/paused (--active)`);
+        else if (opts.status !== 'all') filters.push(`status: ${opts.status}`);
         if (opts.tag) filters.push(`tag: ${opts.tag}`);
         if (opts.search) filters.push(`search: "${opts.search}"`);
 
