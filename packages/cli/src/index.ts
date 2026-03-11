@@ -20,6 +20,7 @@ import { registerPsShortcutCommand } from './commands/ps-shortcut.js';
 import { registerUiCommand } from './commands/ui.js';
 import { registerMcpCommand } from './commands/mcp.js';
 import { registerConfigCommand } from './commands/config.js';
+import { registerDoctorCommand } from './commands/doctor.js';
 import { maybeAutoUpgradeOnStartup } from './utils/auto-updater.js';
 import { maybePrintDocsHint } from './utils/config.js';
 
@@ -67,6 +68,7 @@ registerProfileCommand(program);
 registerFanOutCommand(program);
 registerMcpCommand(program);
 registerConfigCommand(program);
+registerDoctorCommand(program);
 
 program
   .command('help')
