@@ -210,6 +210,7 @@ export function registerAgentCommand(program: Command): void {
       const result = await requestDaemon<{
         agent: Record<string, unknown>;
         bindings: Array<Record<string, unknown>>;
+        sessionCount?: number;
       }>('agent.get', { ref });
 
       if (opts.json) {
@@ -231,6 +232,7 @@ export function registerAgentCommand(program: Command): void {
         visibility: string;
       };
       const bindings = result.bindings as Array<{ provider: string; status: string; remoteAgentId?: string }>;
+      const sessionCount = result.sessionCount ?? 0;
 
       // Header
       console.log(`\n${BOLD}Agent Details${RESET}\n`);
@@ -242,6 +244,7 @@ export function registerAgentCommand(program: Command): void {
       console.log(`  ${GRAY}Runtime:${RESET}     ${agent.runtimeType}`);
       console.log(`  ${GRAY}Project:${RESET}     ${agent.projectPath}`);
       console.log(`  ${GRAY}Sandbox:${RESET}     ${agent.sandbox ? `${GREEN}enabled${RESET}` : `${GRAY}disabled${RESET}`}`);
+      console.log(`  ${GRAY}Sessions:${RESET}    ${sessionCount}`);
 
       const visibilityColor = agent.visibility === 'public' ? GREEN : agent.visibility === 'unlisted' ? YELLOW : GRAY;
       console.log(`  ${GRAY}Visibility:${RESET}  ${visibilityColor}${agent.visibility}${RESET}`);

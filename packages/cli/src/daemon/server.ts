@@ -354,9 +354,11 @@ export class AgentNetworkDaemonServer {
         const ref = expectString(request.params?.ref, 'ref');
         const agent = this.store.resolveAgentRef(ref);
         if (!agent) throw new Error(`Local agent not found: ${ref}`);
+        const sessions = this.store.listSessions({ agentId: agent.id, status: 'all' });
         return {
           agent,
           bindings: this.store.listProviderBindings(agent.id),
+          sessionCount: sessions.length,
         };
       }
 
