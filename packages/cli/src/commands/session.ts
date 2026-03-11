@@ -41,10 +41,11 @@ export function registerSessionCommand(program: Command): void {
     .option('--search <text>', 'Search in session title')
     .option('--older-than <duration>', 'Filter sessions older than duration (e.g., 7d, 24h, 1w)')
     .option('--newer-than <duration>', 'Filter sessions newer than duration (e.g., 7d, 24h, 1w)')
+    .option('--sort <field>', 'Sort by field: created_at, updated_at, title (default: updated_at)')
     .option('--limit <number>', 'Limit number of results', parseInt)
     .option('--json', 'Output JSON')
     .option('--short', 'Output only session IDs (one per line)')
-    .action(async (opts: { agent?: string; taskGroup?: string; status: string; active?: boolean; tag?: string; search?: string; olderThan?: string; newerThan?: string; limit?: number; json?: boolean; short?: boolean }) => {
+    .action(async (opts: { agent?: string; taskGroup?: string; status: string; active?: boolean; tag?: string; search?: string; olderThan?: string; newerThan?: string; sort?: string; limit?: number; json?: boolean; short?: boolean }) => {
       await ensureDaemonRunning();
       
       // --active is a shortcut for --status active,idle,paused
@@ -71,6 +72,8 @@ export function registerSessionCommand(program: Command): void {
         title: string | null;
         status: string;
         lastActiveAt: string;
+        createdAt: string;
+        updatedAt: string;
         agentId: string;
         agentName?: string;
       }> }>('session.list', {
@@ -98,6 +101,28 @@ export function registerSessionCommand(program: Command): void {
           return lastActive > cutoff;
         });
       }
+
+      // Apply sorting
+      const sortField = opts.sort || 'updated_at';
+      const validSortFields = ['created_at', 'updated_at', 'title'];
+      if (!validSortFields.includes(sortField)) {
+        log.error(`Invalid --sort value: ${sortField}`);
+        console.log(`  ${GRAY}Valid options: ${validSortFields.join(', ')}${RESET}`);
+        process.exit(1);
+      }
+
+      filteredSessions.sort((a, b) => {
+        if (sortField === 'title') {
+          const titleA = a.title || '';
+          const titleB = b.title || '';
+          return titleA.localeCompare(titleB);
+        } else if (sortField === 'created_at') {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } else {
+          // updated_at (default)
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        }
+      });
       
       if (opts.json) {
         console.log(JSON.stringify({ sessions: filteredSessions }, null, 2));
