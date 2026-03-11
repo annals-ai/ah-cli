@@ -3,7 +3,7 @@ import { ensureDaemonRunning } from '../daemon/process.js';
 import { requestDaemon } from '../daemon/client.js';
 import { listProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
-import { BOLD, GRAY, RESET } from '../utils/table.js';
+import { BOLD, GRAY, GREEN, YELLOW, RED, RESET, renderTable, type Column } from '../utils/table.js';
 import { getDaemonLogPath } from '../daemon/paths.js';
 import { readFileSync } from 'node:fs';
 
@@ -89,19 +89,63 @@ export function registerAgentCommand(program: Command): void {
         return;
       }
 
+      // Truncate helper
+      const truncate = (str: string, maxLen: number): string => {
+        if (!str) return '';
+        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
+      };
+
+      // Define table columns
+      const columns: Column[] = [
+        { key: 'id', label: 'ID', width: 8 },
+        { key: 'slug', label: 'Slug', width: 16 },
+        { key: 'runtime', label: 'Runtime', width: 9 },
+        { key: 'name', label: 'Name', width: 20 },
+        { key: 'sandbox', label: 'Sandbox', width: 8 },
+        { key: 'visibility', label: 'Visibility', width: 10 },
+        { key: 'providers', label: 'Providers', width: 24 },
+      ];
+
+      // Format rows
+      const rows = result.agents.map((agent) => {
+        const bindings = result.bindings.filter((binding) => binding.agentId === agent.id);
+        const providerSummary = bindings.length > 0
+          ? bindings.map((b) => {
+              const statusColor = b.status === 'active' ? GREEN : b.status === 'pending' ? YELLOW : GRAY;
+              return `${b.provider}(${statusColor}${b.status}${RESET})`;
+            }).join(' ')
+          : '-';
+
+        const sandboxDisplay = agent.sandbox
+          ? `${GREEN}on${RESET}`
+          : `${GRAY}off${RESET}`;
+
+        const visibilityColor = agent.visibility === 'public'
+          ? GREEN
+          : agent.visibility === 'unlisted'
+            ? YELLOW
+            : GRAY;
+
+        return {
+          id: agent.id.slice(0, 7),
+          slug: truncate(agent.slug, 14),
+          runtime: agent.runtimeType,
+          name: truncate(agent.name, 18),
+          sandbox: sandboxDisplay,
+          visibility: `${visibilityColor}${agent.visibility}${RESET}`,
+          providers: providerSummary,
+        };
+      });
+
       console.log('');
-      console.log(`  ${BOLD}Local Agents${RESET}`);
+      console.log(renderTable(columns, rows));
+
+      // Print summary
+      const sandboxCount = result.agents.filter((a) => a.sandbox).length;
+      const publicCount = result.agents.filter((a) => a.visibility === 'public').length;
+      const activeBindings = result.bindings.filter((b) => b.status === 'active').length;
       console.log('');
-      for (const item of result.agents) {
-        const bindings = result.bindings.filter((binding) => binding.agentId === item.id);
-        console.log(`  ${BOLD}${item.slug}${RESET}  ${GRAY}${item.runtimeType}${RESET}`);
-        console.log(`     ${item.name}`);
-        console.log(`     ${GRAY}${item.projectPath}${RESET}`);
-        console.log(`     sandbox=${item.sandbox ? 'on' : 'off'} visibility=${item.visibility}`);
-        if (bindings.length) {
-          console.log(`     ${GRAY}providers:${RESET} ${bindings.map((binding) => `${binding.provider}(${binding.status})`).join(', ')}`);
-        }
-      }
+      console.log(`  ${GRAY}Total: ${result.agents.length} agents, ${sandboxCount} sandboxed, ${publicCount} public, ${activeBindings} active bindings${RESET}`);
       console.log('');
     });
 
