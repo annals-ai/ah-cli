@@ -42,16 +42,16 @@ export function registerSessionCommand(program: Command): void {
         return;
       }
 
-      // Define status color mapping
-      const statusColors: Record<string, string> = {
-        running: GREEN,
-        active: GREEN,
-        idle: GRAY,
-        paused: YELLOW,
-        failed: RED,
-        completed: GRAY,
-        archived: GRAY,
-        queued: GRAY,
+      // Define status color mapping with symbols
+      const statusConfig: Record<string, { color: string; symbol: string }> = {
+        running: { color: GREEN, symbol: '●' },
+        active: { color: GREEN, symbol: '●' },
+        idle: { color: GRAY, symbol: '○' },
+        paused: { color: YELLOW, symbol: '◐' },
+        failed: { color: RED, symbol: '✗' },
+        completed: { color: GRAY, symbol: '✓' },
+        archived: { color: GRAY, symbol: '◇' },
+        queued: { color: GRAY, symbol: '○' },
       };
 
       // Truncate helper
@@ -60,23 +60,56 @@ export function registerSessionCommand(program: Command): void {
         return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
       };
 
+      // Format relative time
+      const formatRelativeTime = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        return `${diffDays}d`;
+      };
+
       // Define table columns
       const columns: Column[] = [
-        { key: 'id', label: 'ID', width: 10 },
-        { key: 'agentName', label: 'Agent Name', width: 20 },
+        { key: 'id', label: 'ID', width: 9 },
+        { key: 'agent', label: 'Agent', width: 9 },
         { key: 'status', label: 'Status', width: 10 },
-        { key: 'title', label: 'Title', width: 80 },
+        { key: 'active', label: 'Active', width: 9 },
+        { key: 'title', label: 'Title', width: 50 },
       ];
 
       // Format rows
-      const rows = result.sessions.map((s) => ({
-        id: s.id.slice(0, 8),
-        agentName: s.agentName || s.agentId?.slice(0, 8) || '-',
-        status: `${statusColors[s.status] || GRAY}${s.status}${RESET}`,
-        title: truncate(s.title || '', 77),
-      }));
+      const rows = result.sessions.map((s) => {
+        const config = statusConfig[s.status] || { color: GRAY, symbol: '○' };
+        return {
+          id: s.id.slice(0, 8),
+          agent: s.agentName || s.agentId?.slice(0, 8) || '-',
+          status: `${config.color}${config.symbol} ${s.status}${RESET}`,
+          active: formatRelativeTime(s.lastActiveAt),
+          title: truncate(s.title || '(no title)', 47),
+        };
+      });
 
       console.log(renderTable(columns, rows));
+
+      // Print summary
+      const statusCounts: Record<string, number> = {};
+      for (const s of result.sessions) {
+        statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
+      }
+      const summary = Object.entries(statusCounts)
+        .map(([status, count]) => {
+          const config = statusConfig[status] || { color: GRAY, symbol: '○' };
+          return `${config.color}${config.symbol}${RESET} ${count} ${status}`;
+        })
+        .join('  ');
+      console.log(`\n${GRAY}Total: ${result.sessions.length} sessions${RESET}  ${summary}`);
     });
 
   session
