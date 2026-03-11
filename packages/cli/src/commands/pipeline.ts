@@ -61,6 +61,71 @@ function parsePipelineArgs(args: string[]): PipelineStep[] {
 }
 
 /**
+ * Parse --stages string into pipeline steps
+ * Format: "agent1:task1,agent2:task2,agent3:task3"
+ * Example: "trend-analyst:分析AI趋势,idea-master:基于{prev}生成创意,writer:写SEO文章"
+ */
+function parseStagesString(stagesStr: string): PipelineStep[] {
+  const steps: PipelineStep[] = [];
+  
+  // Split by comma, but need to handle commas inside task descriptions
+  // We'll parse character by character to handle potential edge cases
+  const segments = splitStages(stagesStr);
+  
+  for (const segment of segments) {
+    const colonIndex = segment.indexOf(':');
+    if (colonIndex === -1) {
+      throw new Error(`Invalid stage format: "${segment}". Expected "agent:task" format.`);
+    }
+    
+    const agent = segment.slice(0, colonIndex).trim();
+    const task = segment.slice(colonIndex + 1).trim();
+    
+    if (!agent) {
+      throw new Error(`Missing agent name in stage: "${segment}"`);
+    }
+    if (!task) {
+      throw new Error(`Missing task description in stage: "${segment}"`);
+    }
+    
+    steps.push({ agent, task });
+  }
+  
+  return steps;
+}
+
+/**
+ * Split stages string by comma, respecting potential edge cases
+ */
+function splitStages(stagesStr: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let depth = 0;
+  
+  for (let i = 0; i < stagesStr.length; i++) {
+    const char = stagesStr[i];
+    
+    // Track nested braces/brackets/parens
+    if (char === '{' || char === '[' || char === '(') depth++;
+    if (char === '}' || char === ']' || char === ')') depth--;
+    
+    // Split on comma only when not inside nested structures
+    if (char === ',' && depth === 0) {
+      segments.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  if (current.trim()) {
+    segments.push(current.trim());
+  }
+  
+  return segments;
+}
+
+/**
  * Replace {prev} placeholder with previous output
  */
 function injectPrevOutput(task: string, prevOutput: string): string {
@@ -217,45 +282,63 @@ export function registerPipelineCommand(program: Command): void {
     .description('Run a pipeline: each step\'s output is passed to the next via {prev}')
     .allowUnknownOption(true)
     .allowExcessArguments(true)
+    .option('--stages <spec>', 'Pipeline stages: "agent1:task1,agent2:task2 with {prev},agent3:task3"')
     .option('--output-file <path>', 'Save final result to file')
     .option('--json', 'Output JSON for each step')
     .option('--timeout <seconds>', 'Timeout per step in seconds', '300')
     .action(async (opts: {
+      stages?: string;
       outputFile?: string;
       json?: boolean;
       timeout?: string;
     }) => {
-      // Parse pipeline steps from raw args
-      // We need to extract everything after 'run' until we hit another command flag
-      const rawArgs = process.argv.slice(process.argv.indexOf('run') + 1);
-      
-      // Filter out known options
-      const stepArgs: string[] = [];
-      for (let i = 0; i < rawArgs.length; i++) {
-        const arg = rawArgs[i];
-        if (arg === '--output-file') {
-          i++; // Skip value
-          continue;
-        }
-        if (arg === '--json') {
-          continue;
-        }
-        if (arg === '--timeout') {
-          i++; // Skip value
-          continue;
-        }
-        stepArgs.push(arg);
-      }
+      let steps: PipelineStep[];
 
-      const steps = parsePipelineArgs(stepArgs);
+      // Check if --stages is provided
+      if (opts.stages) {
+        // Parse stages string
+        steps = parseStagesString(opts.stages);
+      } else {
+        // Parse pipeline steps from raw args (legacy --then syntax)
+        const rawArgs = process.argv.slice(process.argv.indexOf('run') + 1);
+        
+        // Filter out known options
+        const stepArgs: string[] = [];
+        for (let i = 0; i < rawArgs.length; i++) {
+          const arg = rawArgs[i];
+          if (arg === '--stages') {
+            i++; // Skip value
+            continue;
+          }
+          if (arg === '--output-file') {
+            i++; // Skip value
+            continue;
+          }
+          if (arg === '--json') {
+            continue;
+          }
+          if (arg === '--timeout') {
+            i++; // Skip value
+            continue;
+          }
+          stepArgs.push(arg);
+        }
+
+        steps = parsePipelineArgs(stepArgs);
+      }
 
       if (steps.length === 0) {
         log.error('No pipeline steps provided');
         console.error('');
         console.error('Usage:');
+        console.error('  ah pipeline run --stages "agent1:task1,agent2:task2,agent3:task3"');
         console.error('  ah pipeline run <agent1> "<task1>" --then <agent2> "<task2>"');
         console.error('');
-        console.error('Example:');
+        console.error('Examples:');
+        console.error('  # New --stages syntax:');
+        console.error('  ah pipeline run --stages "trend-analyst:分析AI趋势,idea-master:基于{prev}生成创意,writer:写SEO文章"');
+        console.error('');
+        console.error('  # Legacy --then syntax:');
         console.error('  ah pipeline run trend-analyst "/trend AI tools" --then idea-master "/brainstorm {prev}"');
         console.error('');
         process.exit(1);
