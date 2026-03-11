@@ -543,4 +543,74 @@ export function registerAgentCommand(program: Command): void {
       }
       console.log();
     });
+
+  // Ping agents to check health
+  agent
+    .command('ping [refs...]', { isDefault: false })
+    .description('Ping one or more agents to check if they are healthy and responsive')
+    .option('--agents <refs>', 'Comma-separated agent slugs or IDs')
+    .option('--timeout <seconds>', 'Timeout per agent in seconds', '30')
+    .option('--json', 'Output JSON')
+    .action(async (refs: string[] | undefined, opts: { agents?: string; timeout: string; json?: boolean }) => {
+      await ensureDaemonRunning();
+
+      // Support both --agents flag and positional args
+      let agentRefs: string[] = [];
+      if (opts.agents) {
+        agentRefs = opts.agents.split(',').map((s) => s.trim()).filter(Boolean);
+      } else if (refs) {
+        agentRefs = refs.filter((a) => !a.startsWith('-'));
+      }
+
+      if (agentRefs.length === 0) {
+        // If no agents specified, ping all agents
+        const listResult = await requestDaemon<{ agents: Array<{ slug: string; name: string }> }>('agent.list');
+        agentRefs = listResult.agents.map((a) => a.slug);
+        if (agentRefs.length === 0) {
+          log.info('No agents to ping. Add an agent first with ah agent add.');
+          return;
+        }
+      }
+
+      const timeoutMs = (parseInt(opts.timeout, 10) || 30) * 1000;
+
+      try {
+        const result = await requestDaemon<{
+          results: Array<{
+            agentRef: string;
+            agentSlug: string;
+            status: 'healthy' | 'unhealthy' | 'error';
+            responseTimeMs?: number;
+            error?: string;
+          }>;
+        }>('agent.ping', { agentRefs, timeoutMs });
+
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        // Display results in a table
+        console.log('');
+        const healthy = result.results.filter((r) => r.status === 'healthy');
+        const unhealthy = result.results.filter((r) => r.status === 'unhealthy');
+        const errors = result.results.filter((r) => r.status === 'error');
+
+        for (const r of result.results) {
+          const statusIcon = r.status === 'healthy' ? GREEN : r.status === 'unhealthy' ? YELLOW : RED;
+          const statusLabel = r.status === 'healthy' ? 'healthy' : r.status === 'unhealthy' ? 'unhealthy' : 'error';
+          console.log(`  ${BOLD}${r.agentSlug}${RESET}  ${statusIcon}${statusLabel}${RESET}${r.responseTimeMs ? ` ${GRAY}(${r.responseTimeMs}ms)${RESET}` : ''}`);
+          if (r.error) {
+            console.log(`  ${GRAY}Error:${RESET} ${r.error}`);
+          }
+        }
+
+        console.log('');
+        console.log(`  ${GRAY}Summary:${RESET} ${GREEN}${healthy.length} healthy${RESET}, ${YELLOW}${unhealthy.length} unhealthy${RESET}, ${RED}${errors.length} error${RESET}`);
+        console.log('');
+      } catch (error) {
+        log.error(`Ping failed: ${(error as Error).message}`);
+        process.exit(1);
+      }
+    });
 }

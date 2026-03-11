@@ -363,6 +363,83 @@ export class AgentNetworkDaemonServer {
         };
       }
 
+      case 'agent.ping': {
+        const agentRefs = request.params?.agentRefs;
+        if (!Array.isArray(agentRefs) || agentRefs.length === 0) {
+          throw new Error('agentRefs is required and must be a non-empty array');
+        }
+        const timeoutMs = typeof request.params?.timeoutMs === 'number' ? request.params.timeoutMs : 30000;
+
+        // Use simple health check that doesn't require launching Claude Code
+        // This checks: agent exists, project path exists, runtime is available
+        const pingAgent = async (ref: string): Promise<{
+          agentRef: string;
+          agentSlug: string;
+          status: 'healthy' | 'unhealthy' | 'error';
+          responseTimeMs?: number;
+          error?: string;
+        }> => {
+          const startTime = Date.now();
+
+          try {
+            const agent = this.store.resolveAgentRef(ref);
+            if (!agent) {
+              return { agentRef: ref, agentSlug: ref, status: 'error', error: 'Agent not found' };
+            }
+
+            // Check project path exists
+            try {
+              const { statSync } = await import('node:fs');
+              const stat = statSync(agent.projectPath);
+              if (!stat.isDirectory()) {
+                return {
+                  agentRef: ref,
+                  agentSlug: agent.slug,
+                  status: 'unhealthy',
+                  error: 'Project path is not a directory',
+                };
+              }
+            } catch {
+              return {
+                agentRef: ref,
+                agentSlug: agent.slug,
+                status: 'unhealthy',
+                error: `Project path not found: ${agent.projectPath}`,
+              };
+            }
+
+            // Check runtime type is supported
+            const supportedRuntimes = ['claude', 'codex', 'gemini', 'openai'];
+            if (!supportedRuntimes.includes(agent.runtimeType.toLowerCase())) {
+              return {
+                agentRef: ref,
+                agentSlug: agent.slug,
+                status: 'unhealthy',
+                error: `Unsupported runtime: ${agent.runtimeType}`,
+              };
+            }
+
+            const responseTimeMs = Date.now() - startTime;
+            return {
+              agentRef: ref,
+              agentSlug: agent.slug,
+              status: 'healthy',
+              responseTimeMs,
+            };
+          } catch (error) {
+            return {
+              agentRef: ref,
+              agentSlug: ref,
+              status: 'error',
+              error: (error as Error).message,
+            };
+          }
+        };
+
+        const results = await Promise.all(agentRefs.map((ref) => pingAgent(String(ref))));
+        return { results };
+      }
+
       case 'agent.add': {
         const agent = createManagedAgent({ store: this.store, runtime: this.runtime }, {
           name: expectString(request.params?.name, 'name'),
