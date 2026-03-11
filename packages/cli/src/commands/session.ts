@@ -571,6 +571,152 @@ export function registerSessionCommand(program: Command): void {
         }
       });
     });
+
+  // --- Session export: export session to JSON or markdown ---
+  session
+    .command('export <id>')
+    .description('Export a session to JSON or markdown format')
+    .option('-f, --format <format>', 'Output format: json or markdown (default: json)', 'json')
+    .option('-o, --output <file>', 'Write output to file instead of stdout')
+    .option('--messages', 'Include full message history (default: include all)')
+    .option('--no-messages', 'Exclude message history (metadata only)')
+    .action(async (id: string, opts: { format: string; output?: string; messages?: boolean }) => {
+      await ensureDaemonRunning();
+
+      // Validate format
+      const format = opts.format.toLowerCase();
+      if (format !== 'json' && format !== 'markdown' && format !== 'md') {
+        log.error(`Invalid format: ${opts.format}. Use 'json' or 'markdown'.`);
+        process.exit(1);
+      }
+      const isMarkdown = format === 'markdown' || format === 'md';
+
+      // Get session data
+      // --no-messages sets opts.messages to false; default is to include messages
+      const includeMessages = opts.messages !== false;
+      const result = await requestDaemon<{
+        session: {
+          id: string;
+          title: string | null;
+          status: string;
+          lastActiveAt: string;
+          agentId: string;
+          agentName?: string;
+          createdAt?: string;
+          tags?: string[];
+        };
+        messages?: Array<{ 
+          role: string; 
+          content: string; 
+          createdAt?: string;
+        }>;
+      }>('session.show', { id });
+
+      const session = result.session;
+      // Only include messages if requested (--no-messages not passed)
+      const messages = includeMessages ? (result.messages || []) : [];
+
+      // Format output
+      let output: string;
+
+      if (isMarkdown) {
+        output = formatSessionMarkdown(session, messages);
+      } else {
+        output = JSON.stringify({
+          session: {
+            id: session.id,
+            title: session.title,
+            status: session.status,
+            agentId: session.agentId,
+            agentName: session.agentName,
+            createdAt: session.createdAt,
+            lastActiveAt: session.lastActiveAt,
+            tags: session.tags || [],
+          },
+          messages: includeMessages ? messages : undefined,
+          exportedAt: new Date().toISOString(),
+        }, null, 2);
+      }
+
+      // Write to file or stdout
+      if (opts.output) {
+        const fs = await import('node:fs');
+        const outputPath = opts.output;
+        try {
+          fs.writeFileSync(outputPath, output, 'utf-8');
+          log.success(`Session exported to: ${BOLD}${outputPath}${RESET}`);
+          console.log(`  ${GRAY}Format: ${isMarkdown ? 'markdown' : 'json'}${RESET}`);
+          console.log(`  ${GRAY}Messages: ${messages.length}${RESET}`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error(`Failed to write file: ${message}`);
+          process.exit(1);
+        }
+      } else {
+        console.log(output);
+      }
+    });
+}
+
+/**
+ * Format session as markdown
+ */
+function formatSessionMarkdown(
+  session: {
+    id: string;
+    title: string | null;
+    status: string;
+    lastActiveAt: string;
+    agentId: string;
+    agentName?: string;
+    createdAt?: string;
+    tags?: string[];
+  },
+  messages: Array<{ role: string; content: string; createdAt?: string }>
+): string {
+  const lines: string[] = [];
+
+  // Title
+  lines.push(`# ${session.title || 'Untitled Session'}`);
+  lines.push('');
+
+  // Metadata
+  lines.push('## Session Info');
+  lines.push('');
+  lines.push(`- **Session ID:** ${session.id}`);
+  if (session.agentName) {
+    lines.push(`- **Agent:** ${session.agentName}`);
+  }
+  lines.push(`- **Status:** ${session.status}`);
+  if (session.createdAt) {
+    lines.push(`- **Created:** ${session.createdAt}`);
+  }
+  lines.push(`- **Last Active:** ${session.lastActiveAt}`);
+  if (session.tags && session.tags.length > 0) {
+    lines.push(`- **Tags:** ${session.tags.join(', ')}`);
+  }
+  lines.push('');
+
+  // Messages
+  if (messages.length > 0) {
+    lines.push('## Conversation');
+    lines.push('');
+
+    for (const msg of messages) {
+      const role = msg.role === 'user' ? '**User**' : '**Agent**';
+      const timestamp = msg.createdAt ? ` _(${msg.createdAt})_` : '';
+      lines.push(`### ${role}${timestamp}`);
+      lines.push('');
+      lines.push(msg.content);
+      lines.push('');
+    }
+  }
+
+  lines.push('---');
+  lines.push(`_Exported from ah-cli on ${new Date().toISOString()}_`);
+  lines.push('');
+
+  return lines.join('\n');
 }
 
 /**
