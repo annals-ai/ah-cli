@@ -165,7 +165,63 @@ export function registerAgentCommand(program: Command): void {
         return;
       }
 
-      console.log(JSON.stringify(result, null, 2));
+      // Human-readable output
+      const agent = result.agent as {
+        id: string;
+        slug: string;
+        name: string;
+        runtimeType: string;
+        projectPath: string;
+        sandbox: boolean;
+        persona?: string | null;
+        description?: string | null;
+        capabilities?: string[];
+        visibility: string;
+      };
+      const bindings = result.bindings as Array<{ provider: string; status: string; remoteAgentId?: string }>;
+
+      // Header
+      console.log(`\n${BOLD}Agent Details${RESET}\n`);
+
+      // Agent info
+      console.log(`  ${GRAY}ID:${RESET}          ${agent.id}`);
+      console.log(`  ${GRAY}Slug:${RESET}        ${agent.slug}`);
+      console.log(`  ${GRAY}Name:${RESET}        ${agent.name}`);
+      console.log(`  ${GRAY}Runtime:${RESET}     ${agent.runtimeType}`);
+      console.log(`  ${GRAY}Project:${RESET}     ${agent.projectPath}`);
+      console.log(`  ${GRAY}Sandbox:${RESET}     ${agent.sandbox ? `${GREEN}enabled${RESET}` : `${GRAY}disabled${RESET}`}`);
+
+      const visibilityColor = agent.visibility === 'public' ? GREEN : agent.visibility === 'unlisted' ? YELLOW : GRAY;
+      console.log(`  ${GRAY}Visibility:${RESET}  ${visibilityColor}${agent.visibility}${RESET}`);
+
+      if (agent.description) {
+        const descLines = agent.description.split('\n');
+        const descPreview = descLines.length > 1 ? descLines[0].slice(0, 80) + '...' : agent.description;
+        console.log(`  ${GRAY}Description:${RESET} ${descPreview}`);
+      }
+
+      if (agent.persona) {
+        const personaLines = agent.persona.split('\n');
+        const personaPreview = personaLines.length > 1 ? personaLines[0].slice(0, 80) + '...' : agent.persona.slice(0, 100);
+        console.log(`  ${GRAY}Persona:${RESET}     ${personaPreview}${agent.persona.length > 100 ? '...' : ''}`);
+      }
+
+      if (agent.capabilities && agent.capabilities.length > 0) {
+        console.log(`  ${GRAY}Capabilities:${RESET} ${agent.capabilities.join(', ')}`);
+      }
+
+      // Provider bindings
+      if (bindings && bindings.length > 0) {
+        console.log(`\n  ${BOLD}Provider Bindings${RESET}`);
+        for (const binding of bindings) {
+          const statusColor = binding.status === 'active' ? GREEN : binding.status === 'pending' ? YELLOW : GRAY;
+          const statusStr = `${statusColor}${binding.status}${RESET}`;
+          const remoteId = binding.remoteAgentId ? ` ${GRAY}(${binding.remoteAgentId})${RESET}` : '';
+          console.log(`    ${GRAY}${binding.provider}:${RESET} ${statusStr}${remoteId}`);
+        }
+      }
+
+      console.log();
     });
 
   agent
