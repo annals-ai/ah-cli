@@ -222,7 +222,9 @@ export type RuntimeStreamEvent =
   | { type: 'done'; sessionId: string; result: string; claudeResumeId: string | null }
   | { type: 'error'; sessionId?: string; message: string }
   | { type: 'fan-out-progress'; agentSlug: string; status: 'started' | 'chunk' | 'done' | 'error'; delta?: string; error?: string }
-  | { type: 'fan-out-verdict'; delta: string };
+  | { type: 'fan-out-verdict'; delta: string }
+  | { type: 'parallel-progress'; index: number; status: 'started' | 'completed' | 'error'; sessionId?: string; error?: string }
+  | { type: 'parallel-chunk'; index: number; delta: string };
 
 export interface ProviderExposureResult {
   remoteAgentId?: string | null;

@@ -543,6 +543,35 @@ export class AgentNetworkDaemonServer {
         return { session };
       }
 
+      case 'session.run': {
+        const agentRef = expectString(request.params?.agentRef, 'agentRef');
+        const messages = request.params?.messages;
+        if (!Array.isArray(messages) || messages.length === 0) {
+          throw new Error('messages array is required');
+        }
+        const maxParallel = typeof request.params?.maxParallel === 'number'
+          ? Math.max(1, Math.min(request.params.maxParallel, 20))
+          : 4;
+        const taskGroupId = typeof request.params?.taskGroupId === 'string'
+          ? request.params.taskGroupId
+          : undefined;
+        const tags = normalizeTags(request.params?.tags);
+        const timeoutMs = typeof request.params?.timeoutMs === 'number'
+          ? request.params.timeoutMs
+          : 300_000;
+
+        const result = await this.runtime.runSessionsParallel({
+          agentRef,
+          messages,
+          maxParallel,
+          taskGroupId,
+          tags,
+          timeoutMs,
+        }, (event) => emit(event));
+
+        return result;
+      }
+
       case 'runtime.chat':
       case 'runtime.call': {
         // Send keepalive events every 15s to prevent client socket timeout

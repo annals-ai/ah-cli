@@ -364,11 +364,104 @@ export function registerSessionCommand(program: Command): void {
     });
 
   session
-    .command('archive <id>')
-    .description('Archive a session')
+    .command('archive [id]')
+    .description('Archive a session or batch archive sessions by status')
     .option('-y, --yes', 'Skip confirmation prompt')
-    .action(async (id: string, opts: { yes?: boolean }) => {
+    .option('--status <status>', 'Batch archive: filter by status (failed, idle, completed, etc.)')
+    .option('--all', 'Batch archive: archive all sessions matching --status filter')
+    .option('--dry-run', 'Batch archive: preview sessions to be archived without archiving')
+    .option('--limit <number>', 'Batch archive: limit number of sessions to archive', parseInt)
+    .action(async (id: string | undefined, opts: { yes?: boolean; status?: string; all?: boolean; dryRun?: boolean; limit?: number }) => {
       await ensureDaemonRunning();
+
+      // Batch archive mode: --status and --all
+      if (opts.status && opts.all) {
+        // Get sessions matching the status filter
+        const result = await requestDaemon<{
+          sessions: Array<{
+            id: string;
+            title: string | null;
+            status: string;
+            lastActiveAt: string;
+            agentId: string;
+            agentName?: string;
+          }>;
+        }>('session.list', { status: opts.status, limit: opts.limit });
+
+        const sessions = result.sessions;
+
+        if (sessions.length === 0) {
+          log.info(`No sessions found with status: ${opts.status}`);
+          return;
+        }
+
+        // Dry run: just show what would be archived
+        if (opts.dryRun) {
+          console.log(`\n${BOLD}Sessions to archive (${sessions.length}):${RESET}\n`);
+          for (const s of sessions) {
+            const title = s.title || '(no title)';
+            console.log(`  ${GRAY}${s.id.slice(0, 8)}${RESET}  ${title.slice(0, 50)}${title.length > 50 ? '...' : ''}`);
+          }
+          console.log(`\n  ${GRAY}Run without --dry-run to archive these sessions.${RESET}`);
+          return;
+        }
+
+        // Require confirmation unless --yes
+        if (!opts.yes) {
+          console.log(`\n${BOLD}Archive ${sessions.length} session(s) with status: ${opts.status}?${RESET}\n`);
+          console.log(`  ${GRAY}Sessions:${RESET}`);
+          for (const s of sessions.slice(0, 5)) {
+            const title = s.title || '(no title)';
+            console.log(`    ${GRAY}${s.id.slice(0, 8)}${RESET}  ${title.slice(0, 40)}`);
+          }
+          if (sessions.length > 5) {
+            console.log(`    ${GRAY}... and ${sessions.length - 5} more${RESET}`);
+          }
+          console.log();
+
+          const rl = require('node:readline').createInterface({
+            input: process.stdin,
+            output: process.stderr,
+          });
+
+          const answer = await new Promise<string>((resolve) => {
+            rl.question(`  Are you sure? [y/N] `, (ans: string) => {
+              rl.close();
+              resolve(ans.trim().toLowerCase());
+            });
+          });
+
+          if (answer !== 'y' && answer !== 'yes') {
+            log.info('Aborted.');
+            return;
+          }
+        }
+
+        // Archive all matching sessions
+        let archived = 0;
+        let errors = 0;
+        for (const s of sessions) {
+          try {
+            await requestDaemon('session.archive', { id: s.id });
+            archived++;
+          } catch {
+            errors++;
+          }
+        }
+
+        log.success(`Archived ${archived} session(s)${errors > 0 ? `, ${errors} error(s)` : ''}`);
+        return;
+      }
+
+      // Single session archive mode
+      if (!id) {
+        log.error('Session ID required. Use --status and --all for batch archive.');
+        console.log(`  ${GRAY}Examples:${RESET}`);
+        console.log(`    ${GRAY}ah session archive <id>${RESET}`);
+        console.log(`    ${GRAY}ah session archive --status failed --all${RESET}`);
+        console.log(`    ${GRAY}ah session archive --status failed --all --dry-run${RESET}`);
+        process.exit(1);
+      }
 
       // Get session info for confirmation message
       const info = await requestDaemon<{
@@ -655,6 +748,99 @@ export function registerSessionCommand(program: Command): void {
       } else {
         console.log(output);
       }
+    });
+
+  // --- Session run: parallel session execution ---
+  session
+    .command('run')
+    .description('Run multiple sessions in parallel')
+    .requiredOption('--agent <ref>', 'Agent reference (slug or ID)')
+    .option('-m, --messages <text>', 'Messages to send (comma-separated or use multiple -m flags)')
+    .option('--parallel <number>', 'Max number of concurrent sessions', '4')
+    .option('--task-group <id>', 'Bind all sessions to a task group')
+    .option('--tag <tag...>', 'Add tags to all sessions')
+    .option('--stream', 'Stream output from all sessions in real-time')
+    .option('--json', 'Output JSON')
+    .option('--timeout <seconds>', 'Timeout per session', '300')
+    .action(async (opts: {
+      agent: string;
+      messages: string;
+      parallel: string;
+      taskGroup?: string;
+      tag?: string[];
+      stream?: boolean;
+      json?: boolean;
+      timeout: string;
+    }) => {
+      await ensureDaemonRunning();
+
+      // Parse messages - support both comma-separated and multiple -m flags
+      // commander returns string for single -m, or array for multiple -m usage
+      let messages: string[];
+      if (Array.isArray(opts.messages)) {
+        messages = opts.messages;
+      } else if (typeof opts.messages === 'string') {
+        messages = opts.messages.split(',').map(s => s.trim()).filter(Boolean);
+      } else {
+        messages = [];
+      }
+
+      if (messages.length === 0) {
+        log.error('No messages provided. Use -m "msg1,msg2" or -m msg1 -m msg2');
+        process.exit(1);
+      }
+
+      const maxParallel = Math.max(1, Math.min(parseInt(opts.parallel, 10) || 4, 20));
+      const timeoutSecs = parseInt(opts.timeout, 10) || 300;
+      const taskGroupId = opts.taskGroup;
+      const tags = parseTagFlags(opts.tag);
+
+      // Request daemon to run sessions in parallel
+      const result = await requestDaemon<{
+        taskGroupId: string;
+        sessions: Array<{
+          sessionId: string;
+          message: string;
+          status: 'started' | 'completed' | 'error';
+          error?: string;
+          result?: string;
+        }>;
+      }>('session.run', {
+        agentRef: opts.agent,
+        messages,
+        maxParallel,
+        taskGroupId,
+        tags,
+        stream: opts.stream ?? false,
+        timeoutMs: timeoutSecs * 1000,
+      });
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      // Summary output
+      console.log(`\n${BOLD}Parallel Session Results${RESET}  task-group=${GRAY}${result.taskGroupId.slice(0, 8)}...${RESET}`);
+      console.log(`  ${GRAY}Total: ${result.sessions.length} sessions, max parallel: ${maxParallel}${RESET}\n`);
+
+      for (const s of result.sessions) {
+        const statusIcon = s.status === 'completed' ? GREEN : s.status === 'error' ? RED : YELLOW;
+        const statusText = s.status === 'completed' ? 'done' : s.status === 'error' ? 'error' : 'started';
+        console.log(`  ${statusIcon}${s.status === 'completed' ? '✓' : s.status === 'error' ? '✗' : '◐'}${RESET} ${BOLD}session=${GRAY}${s.sessionId.slice(0, 8)}...${RESET} ${statusIcon}${statusText}${RESET}`);
+        if (s.status === 'error' && s.error) {
+          console.log(`    ${RED}${s.error}${RESET}`);
+        } else if (s.status === 'completed' && s.result) {
+          const preview = s.result.length > 150 ? s.result.slice(0, 150) + '...' : s.result;
+          console.log(`    ${GRAY}${preview}${RESET}`);
+        }
+        console.log('');
+      }
+
+      // Stats
+      const completed = result.sessions.filter(s => s.status === 'completed').length;
+      const errors = result.sessions.filter(s => s.status === 'error').length;
+      console.log(`${GRAY}Completed: ${completed}${RESET}  ${errors > 0 ? RED + `Errors: ${errors}` + RESET : ''}`);
     });
 }
 

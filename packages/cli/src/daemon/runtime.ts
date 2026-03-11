@@ -586,6 +586,122 @@ export class DaemonRuntime {
     return { taskGroupId: taskGroup.id, results, verdict };
   }
 
+  async runSessionsParallel(
+    input: {
+      agentRef: string;
+      messages: string[];
+      maxParallel: number;
+      taskGroupId?: string;
+      tags?: string[];
+      timeoutMs: number;
+    },
+    emit: (event: RuntimeStreamEvent) => void,
+  ): Promise<{
+    taskGroupId: string;
+    sessions: Array<{
+      sessionId: string;
+      message: string;
+      status: 'started' | 'completed' | 'error';
+      error?: string;
+      result?: string;
+    }>;
+  }> {
+    const agent = this.store.resolveAgentRef(input.agentRef);
+    if (!agent) {
+      throw new Error(`Local agent not found: ${input.agentRef}`);
+    }
+
+    // Create task group
+    const taskGroup = this.store.createTaskGroup({
+      title: `Parallel sessions: ${input.messages.length} tasks`,
+      source: 'session-run',
+    });
+
+    // Helper to run a single session
+    const runSingleSession = async (message: string, index: number): Promise<{
+      sessionId: string;
+      message: string;
+      status: 'started' | 'completed' | 'error';
+      error?: string;
+      result?: string;
+    }> => {
+      try {
+        // Create session first
+        const session = this.store.createSession({
+          agentId: agent.id,
+          taskGroupId: input.taskGroupId ?? taskGroup.id,
+          origin: 'local_cli',
+          principalType: 'owner_local',
+          principalId: 'owner',
+          status: 'idle',
+          title: message.slice(0, 80),
+          tags: input.tags,
+        });
+
+        emit({ type: 'session', session, agent });
+        emit({ type: 'parallel-progress', index, status: 'started', sessionId: session.id });
+
+        // Execute the session
+        const execResult = await this.execute(
+          {
+            agentRef: input.agentRef,
+            sessionId: session.id,
+            message,
+            mode: 'call',
+            taskGroupId: input.taskGroupId ?? taskGroup.id,
+            tags: input.tags,
+          },
+          (event) => {
+            if (event.type === 'chunk') {
+              emit({ type: 'parallel-chunk', index, delta: event.delta });
+            }
+          },
+        );
+
+        emit({ type: 'parallel-progress', index, status: 'completed', sessionId: session.id });
+
+        return {
+          sessionId: session.id,
+          message,
+          status: 'completed',
+          result: execResult.result,
+        };
+      } catch (error) {
+        emit({ type: 'parallel-progress', index, status: 'error', error: (error as Error).message });
+        return {
+          sessionId: '',
+          message,
+          status: 'error',
+          error: (error as Error).message,
+        };
+      }
+    };
+
+    // Run sessions with controlled concurrency
+    const results: Array<{
+      sessionId: string;
+      message: string;
+      status: 'started' | 'completed' | 'error';
+      error?: string;
+      result?: string;
+    }> = [];
+
+    // Process in batches
+    for (let i = 0; i < input.messages.length; i += input.maxParallel) {
+      const batch = input.messages.slice(i, i + input.maxParallel);
+      const batchPromises = batch.map((msg, batchIndex) =>
+        runSingleSession(msg, i + batchIndex),
+      );
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+    }
+
+    return {
+      taskGroupId: taskGroup.id,
+      sessions: results,
+    };
+  }
+
   private enqueueSession<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
     const previous = this.sessionChains.get(sessionId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(fn);
