@@ -4,6 +4,17 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { log } from '../utils/logger.js';
+import { requestDaemon } from '../daemon/client.js';
+import { ensureDaemonRunning } from '../daemon/process.js';
+import { BOLD, GRAY, GREEN, YELLOW, RESET } from '../utils/table.js';
+
+interface AutoPruneConfig {
+  enabled: boolean;
+  olderThan: string;
+  status: string;
+  action: 'archive' | 'delete';
+  limit: number;
+}
 
 export function registerConfigCommand(program: Command): void {
   const configCmd = program
@@ -146,6 +157,88 @@ export function registerConfigCommand(program: Command): void {
       console.log(`   max_active_requests: ${DEFAULT_RUNTIME_CONFIG.max_active_requests}`);
       console.log(`   queue_wait_timeout_ms: ${DEFAULT_RUNTIME_CONFIG.queue_wait_timeout_ms}`);
       console.log(`   queue_max_length: ${DEFAULT_RUNTIME_CONFIG.queue_max_length}\n`);
+    });
+
+  // Auto prune configuration
+  const autoPruneCmd = configCmd
+    .command('autoprun')
+    .description('Configure automatic session cleanup on daemon start');
+
+  autoPruneCmd
+    .command('show')
+    .description('Show current auto prune configuration')
+    .option('--json', 'Output as JSON')
+    .action(async (opts: { json?: boolean }) => {
+      await ensureDaemonRunning();
+      const result = await requestDaemon<{ config: AutoPruneConfig }>('config.autoPrune.get');
+      const config = result.config;
+
+      if (opts.json) {
+        console.log(JSON.stringify(config, null, 2));
+        return;
+      }
+
+      console.log(`\n${BOLD}Auto Prune Configuration${RESET}\n`);
+      console.log(`  ${GRAY}Enabled:${RESET}    ${config.enabled ? `${GREEN}yes${RESET}` : `${YELLOW}no${RESET}`}`);
+      console.log(`  ${GRAY}Older than:${RESET} ${config.olderThan}`);
+      console.log(`  ${GRAY}Status:${RESET}     ${config.status}`);
+      console.log(`  ${GRAY}Action:${RESET}     ${config.action}`);
+      console.log(`  ${GRAY}Limit:${RESET}      ${config.limit === 0 ? 'no limit' : config.limit}`);
+      console.log('');
+
+      if (!config.enabled) {
+        console.log(`${GRAY}Auto prune is disabled. Enable with:${RESET}`);
+        console.log(`  ${GREEN}ah config autoprun enable${RESET}\n`);
+      }
+    });
+
+  autoPruneCmd
+    .command('enable')
+    .description('Enable auto prune')
+    .option('--older-than <duration>', 'Prune sessions older than this duration (e.g., 7d, 24h, 1w)', '7d')
+    .option('--status <statuses>', 'Comma-separated statuses to prune (e.g., failed,idle,completed)', 'failed,idle,completed')
+    .option('--action <action>', 'Action to take: archive or delete', 'archive')
+    .option('--limit <number>', 'Max sessions to prune per run (0 = no limit)', '100')
+    .action(async (opts: { olderThan: string; status: string; action: string; limit: string }) => {
+      await ensureDaemonRunning();
+      
+      const limit = parseInt(opts.limit, 10);
+      if (isNaN(limit) || limit < 0) {
+        log.error('Invalid limit value. Must be a non-negative integer.');
+        process.exit(1);
+      }
+
+      if (opts.action !== 'archive' && opts.action !== 'delete') {
+        log.error('Invalid action. Must be "archive" or "delete".');
+        process.exit(1);
+      }
+
+      const result = await requestDaemon<{ config: AutoPruneConfig }>('config.autoPrune.set', {
+        enabled: true,
+        olderThan: opts.olderThan,
+        status: opts.status,
+        action: opts.action,
+        limit,
+      });
+
+      log.success('Auto prune enabled');
+      console.log(`\n  ${GRAY}Config:${RESET}`);
+      console.log(`  ${GRAY}•${RESET} Older than: ${result.config.olderThan}`);
+      console.log(`  ${GRAY}•${RESET} Status: ${result.config.status}`);
+      console.log(`  ${GRAY}•${RESET} Action: ${result.config.action}`);
+      console.log(`  ${GRAY}•${RESET} Limit: ${result.config.limit === 0 ? 'no limit' : result.config.limit}`);
+      console.log(`\n  ${GRAY}Sessions will be cleaned when daemon starts.${RESET}\n`);
+    });
+
+  autoPruneCmd
+    .command('disable')
+    .description('Disable auto prune')
+    .action(async () => {
+      await ensureDaemonRunning();
+      await requestDaemon('config.autoPrune.set', { enabled: false });
+      log.success('Auto prune disabled');
+      console.log(`\n  ${GRAY}Sessions will no longer be auto-cleaned on daemon start.${RESET}`);
+      console.log(`  ${GRAY}Use ${GREEN}ah session prune${RESET} to manually clean sessions.\n`);
     });
 }
 

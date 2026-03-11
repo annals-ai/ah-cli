@@ -1091,6 +1091,189 @@ export function registerSessionCommand(program: Command): void {
       const errors = result.sessions.filter(s => s.status === 'error').length;
       console.log(`${GRAY}Completed: ${completed}${RESET}  ${errors > 0 ? RED + `Errors: ${errors}` + RESET : ''}`);
     });
+
+  // --- Session prune: clean up old/unused sessions ---
+  session
+    .command('prune')
+    .description('Clean up old or unused sessions (archive or delete in one step)')
+    .option('--status <status>', 'Filter by status (comma-separated: failed,idle,completed,archived)', 'failed,idle')
+    .option('--older-than <duration>', 'Only prune sessions older than duration (e.g., 7d, 24h, 1w)', '7d')
+    .option('--action <action>', 'Action to take: archive or delete', 'archive')
+    .option('--limit <number>', 'Limit number of sessions to prune', parseInt)
+    .option('--dry-run', 'Preview sessions to be pruned without making changes')
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--json', 'Output JSON')
+    .action(async (opts: {
+      status: string;
+      olderThan: string;
+      action: string;
+      limit?: number;
+      dryRun?: boolean;
+      yes?: boolean;
+      json?: boolean;
+    }) => {
+      await ensureDaemonRunning();
+
+      // Validate action
+      const action = opts.action.toLowerCase();
+      if (action !== 'archive' && action !== 'delete') {
+        log.error(`Invalid action: ${opts.action}. Use 'archive' or 'delete'.`);
+        process.exit(1);
+      }
+
+      // Parse --older-than duration
+      const olderThanMs = parseOlderThan(opts.olderThan);
+      if (olderThanMs === null || olderThanMs <= 0) {
+        log.error(`Invalid --older-than duration: ${opts.olderThan}`);
+        console.log(`  ${GRAY}Examples: 7d, 24h, 1w, 30d, 2w${RESET}`);
+        process.exit(1);
+      }
+
+      const cutoff = Date.now() - olderThanMs;
+
+      // Get sessions matching the status filter
+      const result = await requestDaemon<{
+        sessions: Array<{
+          id: string;
+          title: string | null;
+          status: string;
+          lastActiveAt: string;
+          agentId: string;
+          agentName?: string;
+        }>;
+      }>('session.list', { status: opts.status, limit: opts.limit });
+
+      // Filter by --older-than
+      const sessionsToPrune = result.sessions.filter((s) => {
+        const lastActive = new Date(s.lastActiveAt).getTime();
+        return lastActive < cutoff;
+      });
+
+      if (sessionsToPrune.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify({ pruned: 0, action, sessions: [] }, null, 2));
+          return;
+        }
+        log.info(`No sessions match the criteria (status: ${opts.status}, older than: ${opts.olderThan})`);
+        return;
+      }
+
+      // Dry run: just show what would be pruned
+      if (opts.dryRun) {
+        if (opts.json) {
+          console.log(JSON.stringify({
+            action,
+            olderThan: opts.olderThan,
+            status: opts.status,
+            count: sessionsToPrune.length,
+            sessions: sessionsToPrune.map(s => ({
+              id: s.id,
+              title: s.title,
+              status: s.status,
+              lastActiveAt: s.lastActiveAt,
+              agentName: s.agentName,
+            })),
+          }, null, 2));
+          return;
+        }
+
+        console.log(`\n${BOLD}Sessions to ${action} (${sessionsToPrune.length}):${RESET}\n`);
+        for (const s of sessionsToPrune) {
+          const title = s.title || '(no title)';
+          const lastActive = new Date(s.lastActiveAt);
+          const now = new Date();
+          const diffDays = Math.floor((now.getTime() - lastActive.getTime()) / (24 * 60 * 60 * 1000));
+          console.log(`  ${GRAY}${s.id.slice(0, 8)}${RESET}  ${s.status.padEnd(10)}  ${GRAY}${diffDays}d ago${RESET}  ${title.slice(0, 40)}`);
+        }
+        console.log(`\n  ${GRAY}Run without --dry-run to ${action} these sessions.${RESET}`);
+        return;
+      }
+
+      // JSON output for non-dry-run
+      if (opts.json) {
+        const results = [];
+        for (const s of sessionsToPrune) {
+          try {
+            if (action === 'archive') {
+              await requestDaemon('session.archive', { id: s.id });
+            } else {
+              await requestDaemon('session.delete', { id: s.id });
+            }
+            results.push({ id: s.id, status: 'success' });
+          } catch (err) {
+            results.push({ id: s.id, status: 'error', error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+        console.log(JSON.stringify({
+          action,
+          olderThan: opts.olderThan,
+          status: opts.status,
+          total: sessionsToPrune.length,
+          results,
+        }, null, 2));
+        return;
+      }
+
+      // Require confirmation unless --yes
+      if (!opts.yes) {
+        console.log(`\n${BOLD}${action === 'delete' ? RED : YELLOW}${action.toUpperCase()} ${sessionsToPrune.length} session(s)?${RESET}`);
+        if (action === 'delete') {
+          console.log(`  ${RED}Warning: This cannot be undone!${RESET}`);
+        }
+        console.log(`\n  ${GRAY}Criteria:${RESET}`);
+        console.log(`    ${GRAY}Status:${RESET}      ${opts.status}`);
+        console.log(`    ${GRAY}Older than:${RESET} ${opts.olderThan}`);
+        console.log(`\n  ${GRAY}Sessions:${RESET}`);
+        for (const s of sessionsToPrune.slice(0, 5)) {
+          const title = s.title || '(no title)';
+          console.log(`    ${GRAY}${s.id.slice(0, 8)}${RESET}  ${title.slice(0, 40)}`);
+        }
+        if (sessionsToPrune.length > 5) {
+          console.log(`    ${GRAY}... and ${sessionsToPrune.length - 5} more${RESET}`);
+        }
+        console.log();
+
+        const rl = require('node:readline').createInterface({
+          input: process.stdin,
+          output: process.stderr,
+        });
+
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(`  ${action === 'delete' ? RED : YELLOW}Are you sure?${RESET} [y/N] `, (ans: string) => {
+            rl.close();
+            resolve(ans.trim().toLowerCase());
+          });
+        });
+
+        if (answer !== 'y' && answer !== 'yes') {
+          log.info('Aborted.');
+          return;
+        }
+      }
+
+      // Perform the action
+      let success = 0;
+      let errors = 0;
+
+      for (const s of sessionsToPrune) {
+        try {
+          if (action === 'archive') {
+            await requestDaemon('session.archive', { id: s.id });
+          } else {
+            await requestDaemon('session.delete', { id: s.id });
+          }
+          success++;
+        } catch {
+          errors++;
+        }
+      }
+
+      if (errors > 0) {
+        log.warn(`${action}d ${success}/${sessionsToPrune.length} sessions, ${errors} error(s)`);
+      } else {
+        log.success(`${action}d ${success} session(s)`);
+      }
+    });
 }
 
 /**

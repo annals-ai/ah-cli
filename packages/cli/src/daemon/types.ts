@@ -9,6 +9,19 @@ export type SessionStatus =
   | 'failed'
   | 'archived';
 
+export interface AutoPruneConfig {
+  /** Enable auto prune on daemon start */
+  enabled: boolean;
+  /** Prune sessions older than this duration (e.g., '7d', '24h', '1w') */
+  olderThan: string;
+  /** Comma-separated statuses to prune (e.g., 'failed,idle,completed') */
+  status: string;
+  /** Action to take: 'archive' or 'delete' */
+  action: 'archive' | 'delete';
+  /** Max sessions to prune per run (0 = no limit) */
+  limit: number;
+}
+
 export interface DaemonAgent {
   id: string;
   slug: string;

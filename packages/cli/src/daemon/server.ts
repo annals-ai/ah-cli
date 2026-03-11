@@ -19,11 +19,40 @@ import {
   updateManagedAgent,
 } from './agent-management.js';
 import type { DaemonEnvelope, DaemonRequest } from './protocol.js';
+import type { AutoPruneConfig } from './types.js';
 import { shutdownProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
 import { createUiApiHandler } from '../ui/api-routes.js';
 import { startUiHttpServer, type UiHttpServerHandle } from '../ui/http-server.js';
 import { removeDaemonPid, scheduleDaemonRestartFromCurrentProcess } from './process.js';
+
+/** Default auto prune config */
+const DEFAULT_AUTO_PRUNE_CONFIG: AutoPruneConfig = {
+  enabled: false,
+  olderThan: '7d',
+  status: 'failed,idle,completed',
+  action: 'archive',
+  limit: 100,
+};
+
+/**
+ * Parse duration string like "7d", "24h", "1w" into milliseconds.
+ * Supports: d (days), h (hours), w (weeks).
+ */
+function parseOlderThan(duration: string): number | null {
+  const match = duration.match(/^(\d+)([dhw])$/);
+  if (!match) return null;
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  
+  switch (unit) {
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: return null;
+  }
+}
 
 interface AgentNetworkDaemonServerOptions {
   dbPath?: string;
@@ -202,6 +231,7 @@ export class AgentNetworkDaemonServer {
     log.info(`ah daemon listening on ${socketPath}`);
     log.info(`ah local ui listening on ${this.uiBaseUrl}`);
     void this.restoreProviderIngresses();
+    void this.runAutoPrune();
   }
 
   private registerSignalHandlers(): void {
@@ -807,6 +837,38 @@ export class AgentNetworkDaemonServer {
         return result;
       }
 
+      case 'config.get': {
+        const key = expectString(request.params?.key, 'key');
+        const value = this.store.getDaemonSetting(key);
+        return { key, value };
+      }
+
+      case 'config.set': {
+        const key = expectString(request.params?.key, 'key');
+        const value = request.params?.value;
+        this.store.setDaemonSetting(key, value);
+        return { key, value };
+      }
+
+      case 'config.autoPrune.get': {
+        const config = this.store.getDaemonSetting<AutoPruneConfig>('autoPrune') ?? DEFAULT_AUTO_PRUNE_CONFIG;
+        return { config };
+      }
+
+      case 'config.autoPrune.set': {
+        const partial = request.params ?? {};
+        const current = this.store.getDaemonSetting<AutoPruneConfig>('autoPrune') ?? DEFAULT_AUTO_PRUNE_CONFIG;
+        const updated: AutoPruneConfig = {
+          enabled: typeof partial.enabled === 'boolean' ? partial.enabled : current.enabled,
+          olderThan: typeof partial.olderThan === 'string' ? partial.olderThan : current.olderThan,
+          status: typeof partial.status === 'string' ? partial.status : current.status,
+          action: typeof partial.action === 'string' ? partial.action as 'archive' | 'delete' : current.action,
+          limit: typeof partial.limit === 'number' ? partial.limit : current.limit,
+        };
+        this.store.setDaemonSetting('autoPrune', updated);
+        return { config: updated };
+      }
+
       default:
         throw new Error(`Unknown daemon method: ${request.method}`);
     }
@@ -833,6 +895,74 @@ export class AgentNetworkDaemonServer {
         });
         log.warn(`Failed to restore ${binding.provider} ingress for ${agent.slug}: ${(error as Error).message}`);
       }
+    }
+  }
+
+  /**
+   * Run auto prune if enabled in daemon settings.
+   * This is called on daemon start to clean up old sessions.
+   */
+  private async runAutoPrune(): Promise<void> {
+    const config = this.store.getDaemonSetting<AutoPruneConfig>('autoPrune');
+    if (!config?.enabled) return;
+
+    const olderThanMs = parseOlderThan(config.olderThan);
+    if (!olderThanMs || olderThanMs <= 0) {
+      log.warn(`Invalid autoPrune.olderThan: ${config.olderThan}`);
+      return;
+    }
+
+    const cutoff = Date.now() - olderThanMs;
+    const statuses = config.status.split(',').map(s => s.trim()).filter(Boolean);
+
+    if (statuses.length === 0) {
+      log.warn('autoPrune.status is empty, skipping');
+      return;
+    }
+
+    // Get sessions matching the criteria
+    const sessions = [];
+    for (const status of statuses) {
+      const list = this.store.listSessions({ status: status as 'queued' | 'active' | 'idle' | 'paused' | 'completed' | 'failed' | 'archived' });
+      sessions.push(...list);
+    }
+
+    // Filter by olderThan
+    const toPrune = sessions.filter(s => {
+      const lastActive = new Date(s.lastActiveAt).getTime();
+      return lastActive < cutoff;
+    });
+
+    // Apply limit
+    const limited = config.limit > 0 ? toPrune.slice(0, config.limit) : toPrune;
+
+    if (limited.length === 0) {
+      log.info(`Auto prune: no sessions to ${config.action}`);
+      return;
+    }
+
+    log.info(`Auto prune: ${config.action}ing ${limited.length} session(s) (older than ${config.olderThan}, status: ${config.status})`);
+
+    let success = 0;
+    let errors = 0;
+
+    for (const session of limited) {
+      try {
+        if (config.action === 'archive') {
+          this.store.archiveSession(session.id);
+        } else {
+          this.store.deleteSession(session.id);
+        }
+        success++;
+      } catch {
+        errors++;
+      }
+    }
+
+    if (errors > 0) {
+      log.warn(`Auto prune completed: ${success} ${config.action}d, ${errors} error(s)`);
+    } else {
+      log.info(`Auto prune completed: ${success} session(s) ${config.action}d`);
     }
   }
 }
