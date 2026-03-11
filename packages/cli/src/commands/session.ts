@@ -6,6 +6,25 @@ import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, RED, RESET, YELLOW, BLUE, renderTable, type Column } from '../utils/table.js';
 import { parseTagFlags, runLocalChat } from './local-runtime.js';
 
+/**
+ * Parse duration string like "7d", "24h", "1w" into milliseconds.
+ * Supports: d (days), h (hours), w (weeks).
+ */
+function parseOlderThan(duration: string): number | null {
+  const match = duration.match(/^(\d+)([dhw])$/);
+  if (!match) return null;
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  
+  switch (unit) {
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: return null;
+  }
+}
+
 export function registerSessionCommand(program: Command): void {
   const session = program
     .command('session')
@@ -20,14 +39,32 @@ export function registerSessionCommand(program: Command): void {
     .option('--active', 'Show only active/idle/paused sessions (shortcut for --status active,idle,paused)')
     .option('--tag <tag>', 'Filter by tag')
     .option('--search <text>', 'Search in session title')
+    .option('--older-than <duration>', 'Filter sessions older than duration (e.g., 7d, 24h, 1w)')
+    .option('--newer-than <duration>', 'Filter sessions newer than duration (e.g., 7d, 24h, 1w)')
     .option('--limit <number>', 'Limit number of results', parseInt)
     .option('--json', 'Output JSON')
     .option('--short', 'Output only session IDs (one per line)')
-    .action(async (opts: { agent?: string; taskGroup?: string; status: string; active?: boolean; tag?: string; search?: string; limit?: number; json?: boolean; short?: boolean }) => {
+    .action(async (opts: { agent?: string; taskGroup?: string; status: string; active?: boolean; tag?: string; search?: string; olderThan?: string; newerThan?: string; limit?: number; json?: boolean; short?: boolean }) => {
       await ensureDaemonRunning();
       
       // --active is a shortcut for --status active,idle,paused
       const statusFilter = opts.active ? 'active,idle,paused' : opts.status;
+      
+      // Parse --older-than duration
+      const olderThanMs = opts.olderThan ? parseOlderThan(opts.olderThan) : null;
+      if (olderThanMs !== null && olderThanMs <= 0) {
+        log.error(`Invalid --older-than duration: ${opts.olderThan}`);
+        console.log(`  ${GRAY}Examples: 7d, 24h, 1w, 30d, 2w${RESET}`);
+        process.exit(1);
+      }
+      
+      // Parse --newer-than duration
+      const newerThanMs = opts.newerThan ? parseOlderThan(opts.newerThan) : null;
+      if (newerThanMs !== null && newerThanMs <= 0) {
+        log.error(`Invalid --newer-than duration: ${opts.newerThan}`);
+        console.log(`  ${GRAY}Examples: 7d, 24h, 1w, 30d, 2w${RESET}`);
+        process.exit(1);
+      }
       
       const result = await requestDaemon<{ sessions: Array<{
         id: string;
@@ -44,19 +81,37 @@ export function registerSessionCommand(program: Command): void {
         search: opts.search,
         limit: opts.limit,
       });
+      
+      // Apply --older-than and --newer-than filters on the client side
+      let filteredSessions = result.sessions;
+      if (olderThanMs !== null) {
+        const cutoff = Date.now() - olderThanMs;
+        filteredSessions = filteredSessions.filter((s) => {
+          const lastActive = new Date(s.lastActiveAt).getTime();
+          return lastActive < cutoff;
+        });
+      }
+      if (newerThanMs !== null) {
+        const cutoff = Date.now() - newerThanMs;
+        filteredSessions = filteredSessions.filter((s) => {
+          const lastActive = new Date(s.lastActiveAt).getTime();
+          return lastActive > cutoff;
+        });
+      }
+      
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        console.log(JSON.stringify({ sessions: filteredSessions }, null, 2));
         return;
       }
 
       if (opts.short) {
-        for (const s of result.sessions) {
+        for (const s of filteredSessions) {
           console.log(s.id);
         }
         return;
       }
 
-      if (result.sessions.length === 0) {
+      if (filteredSessions.length === 0) {
         const filters = [];
         if (opts.agent) filters.push(`agent: ${opts.agent}`);
         if (opts.taskGroup) filters.push(`task-group: ${opts.taskGroup}`);
@@ -64,6 +119,8 @@ export function registerSessionCommand(program: Command): void {
         else if (opts.status !== 'all') filters.push(`status: ${opts.status}`);
         if (opts.tag) filters.push(`tag: ${opts.tag}`);
         if (opts.search) filters.push(`search: "${opts.search}"`);
+        if (opts.olderThan) filters.push(`older than: ${opts.olderThan}`);
+        if (opts.newerThan) filters.push(`newer than: ${opts.newerThan}`);
 
         if (filters.length > 0) {
           log.info(`No sessions found matching filters: ${filters.join(', ')}`);
@@ -118,7 +175,7 @@ export function registerSessionCommand(program: Command): void {
       ];
 
       // Format rows
-      const rows = result.sessions.map((s) => {
+      const rows = filteredSessions.map((s) => {
         const config = statusConfig[s.status] || { color: GRAY, symbol: '○' };
         return {
           id: s.id.slice(0, 8),
@@ -133,7 +190,7 @@ export function registerSessionCommand(program: Command): void {
 
       // Print summary
       const statusCounts: Record<string, number> = {};
-      for (const s of result.sessions) {
+      for (const s of filteredSessions) {
         statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
       }
       const summary = Object.entries(statusCounts)
@@ -142,7 +199,15 @@ export function registerSessionCommand(program: Command): void {
           return `${config.color}${config.symbol}${RESET} ${count} ${status}`;
         })
         .join('  ');
-      console.log(`\n${GRAY}Total: ${result.sessions.length} sessions${RESET}  ${summary}`);
+      
+      // Show filter info if --older-than or --newer-than was applied
+      const olderThanInfo = opts.olderThan 
+        ? ` (older than ${opts.olderThan})` 
+        : '';
+      const newerThanInfo = opts.newerThan
+        ? ` (newer than ${opts.newerThan})`
+        : '';
+      console.log(`\n${GRAY}Total: ${filteredSessions.length} sessions${olderThanInfo}${newerThanInfo}${RESET}  ${summary}`);
     });
 
   session
