@@ -15,6 +15,7 @@ import { registerTaskCommand } from './commands/task.js';
 import { registerSessionCommand } from './commands/session.js';
 import { registerUiCommand } from './commands/ui.js';
 import { registerMcpCommand } from './commands/mcp.js';
+import { registerConfigCommand } from './commands/config.js';
 import { maybeAutoUpgradeOnStartup } from './utils/auto-updater.js';
 import { maybePrintDocsHint } from './utils/config.js';
 
@@ -57,6 +58,7 @@ registerSubscribeCommand(program);
 registerProfileCommand(program);
 registerFanOutCommand(program);
 registerMcpCommand(program);
+registerConfigCommand(program);
 
 program
   .command('help')
