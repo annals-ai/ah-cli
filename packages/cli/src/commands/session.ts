@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { ensureDaemonRunning } from '../daemon/process.js';
 import { requestDaemon } from '../daemon/client.js';
 import { log } from '../utils/logger.js';
-import { BOLD, GRAY, GREEN, RESET, YELLOW } from '../utils/table.js';
+import { BOLD, GRAY, GREEN, RED, RESET, YELLOW, renderTable, type Column } from '../utils/table.js';
 import { parseTagFlags, runLocalChat } from './local-runtime.js';
 
 export function registerSessionCommand(program: Command): void {
@@ -20,7 +20,14 @@ export function registerSessionCommand(program: Command): void {
     .option('--json', 'Output JSON')
     .action(async (opts: { agent?: string; taskGroup?: string; status: string; json?: boolean }) => {
       await ensureDaemonRunning();
-      const result = await requestDaemon<{ sessions: Array<Record<string, unknown>> }>('session.list', {
+      const result = await requestDaemon<{ sessions: Array<{
+        id: string;
+        title: string | null;
+        status: string;
+        lastActiveAt: string;
+        agentId: string;
+        agentName?: string;
+      }> }>('session.list', {
         agentRef: opts.agent,
         taskGroupId: opts.taskGroup,
         status: opts.status,
@@ -29,7 +36,47 @@ export function registerSessionCommand(program: Command): void {
         console.log(JSON.stringify(result, null, 2));
         return;
       }
-      console.log(JSON.stringify(result.sessions, null, 2));
+
+      if (result.sessions.length === 0) {
+        log.info('No sessions found.');
+        return;
+      }
+
+      // Define status color mapping
+      const statusColors: Record<string, string> = {
+        running: GREEN,
+        active: GREEN,
+        idle: GRAY,
+        paused: YELLOW,
+        failed: RED,
+        completed: GRAY,
+        archived: GRAY,
+        queued: GRAY,
+      };
+
+      // Truncate helper
+      const truncate = (str: string, maxLen: number): string => {
+        if (!str) return '';
+        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
+      };
+
+      // Define table columns
+      const columns: Column[] = [
+        { key: 'id', label: 'Session ID', width: 40 },
+        { key: 'agentName', label: 'Agent Name', width: 20 },
+        { key: 'status', label: 'Status', width: 12 },
+        { key: 'title', label: 'Title', width: 53 },
+      ];
+
+      // Format rows
+      const rows = result.sessions.map((s) => ({
+        id: s.id,
+        agentName: s.agentName || s.agentId || '-',
+        status: `${statusColors[s.status] || GRAY}${s.status}${RESET}`,
+        title: truncate(s.title || '', 50),
+      }));
+
+      console.log(renderTable(columns, rows));
     });
 
   session
