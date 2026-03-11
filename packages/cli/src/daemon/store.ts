@@ -445,11 +445,21 @@ export class DaemonStore {
     }
   }
 
-  listTaskGroups(): TaskGroup[] {
+  listTaskGroups(query: { status?: string } = {}): TaskGroup[] {
+    const clauses: string[] = [];
+    const params: SqlPrimitive[] = [];
+
+    if (query.status && query.status !== 'all') {
+      clauses.push('status = ?');
+      params.push(query.status);
+    }
+
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.db.prepare(`
       SELECT * FROM task_groups
+      ${where}
       ORDER BY updated_at DESC, created_at DESC
-    `).all() as Record<string, unknown>[];
+    `).all(...params) as Record<string, unknown>[];
     return rows.map((row) => this.mapTaskGroup(row));
   }
 

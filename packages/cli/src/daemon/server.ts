@@ -436,8 +436,10 @@ export class AgentNetworkDaemonServer {
         return { taskGroup };
       }
 
-      case 'task.list':
-        return { taskGroups: this.store.listTaskGroups() };
+      case 'task.list': {
+        const status = request.params?.status as string | undefined;
+        return { taskGroups: this.store.listTaskGroups({ status }) };
+      }
 
       case 'task.show': {
         const id = expectString(request.params?.id, 'id');

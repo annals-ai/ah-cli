@@ -27,8 +27,9 @@ export function registerTaskCommand(program: Command): void {
   task
     .command('list')
     .description('List task groups')
+    .option('--status <status>', 'Filter by status (active|archived|paused|all)', 'all')
     .option('--json', 'Output JSON')
-    .action(async (opts: { json?: boolean }) => {
+    .action(async (opts: { status?: string; json?: boolean }) => {
       await ensureDaemonRunning();
       const result = await requestDaemon<{ taskGroups: Array<{
         id: string;
@@ -36,7 +37,7 @@ export function registerTaskCommand(program: Command): void {
         status: string;
         createdAt: string;
         sessionCount: number;
-      }> }>('task.list');
+      }> }>('task.list', { status: opts.status });
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
         return;
