@@ -216,6 +216,18 @@ export class DaemonRuntime {
     return next;
   }
 
+  startSession(sessionId: string): SessionRecord {
+    const session = this.store.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    // Update status to active
+    const next = this.store.startSession(sessionId);
+    this.schedulePlatformSessionSync(next.id);
+    return next;
+  }
+
   async archiveSession(sessionId: string): Promise<SessionRecord> {
     const session = this.store.getSession(sessionId);
     if (!session) {

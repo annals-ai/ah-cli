@@ -645,6 +645,18 @@ export class DaemonStore {
     return this.updateSession(sessionId, { status: 'paused', touchLastActive: true });
   }
 
+  startSession(sessionId: string): SessionRecord {
+    const session = this.getSession(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+
+    // Can only start sessions that are paused or idle
+    if (!['paused', 'idle', 'completed'].includes(session.status)) {
+      throw new Error(`Cannot start session with status: ${session.status}`);
+    }
+
+    return this.updateSession(sessionId, { status: 'active', touchLastActive: true });
+  }
+
   listSessionTags(sessionId: string): string[] {
     const rows = this.db.prepare(`
       SELECT tag FROM session_tags WHERE session_id = ? ORDER BY tag ASC

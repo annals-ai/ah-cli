@@ -355,12 +355,82 @@ export function registerSessionCommand(program: Command): void {
     });
 
   session
-    .command('stop <id>')
-    .description('Stop the active work for a session')
-    .action(async (id: string) => {
+    .command('stop <ids...>')
+    .description('Stop one or more sessions (space-separated IDs)')
+    .action(async (ids: string[]) => {
       await ensureDaemonRunning();
-      const result = await requestDaemon<{ session: { status: string } }>('session.stop', { id });
-      log.success(`Session updated: ${result.session.status}`);
+      const results = [];
+      for (const id of ids) {
+        try {
+          const result = await requestDaemon<{ session: { status: string } }>('session.stop', { id });
+          results.push({ id, status: result.session.status, error: null });
+        } catch (err) {
+          results.push({ id, status: null, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      // Output results
+      for (const r of results) {
+        if (r.error) {
+          console.log(`${RED}✗${RESET} ${BOLD}${r.id}${RESET} ${RED}${r.error}${RESET}`);
+        } else {
+          console.log(`${GREEN}✓${RESET} ${BOLD}${r.id}${RESET} ${GRAY}→ ${r.status}${RESET}`);
+        }
+      }
+
+      const errors = results.filter(r => r.error).length;
+      if (errors > 0) {
+        log.error(`Stopped ${results.length - errors}/${results.length} sessions, ${errors} error(s)`);
+      } else {
+        log.success(`Stopped ${results.length} session(s)`);
+      }
+    });
+
+  // --- Session start: start one or more sessions in parallel ---
+  session
+    .command('start <ids...>')
+    .description('Start one or more sessions in parallel (space-separated IDs)')
+    .option('--parallel <number>', 'Max concurrent starts', '4')
+    .option('--json', 'Output JSON')
+    .action(async (ids: string[], opts: { parallel?: string; json?: boolean }) => {
+      await ensureDaemonRunning();
+
+      if (ids.length === 0) {
+        log.error('Session ID(s) required');
+        console.log(`  ${GRAY}Usage: ah session start <id1> <id2> ...${RESET}`);
+        process.exit(1);
+      }
+
+      const maxParallel = Math.max(1, Math.min(parseInt(opts.parallel ?? '4', 10) || 4, 20));
+
+      // Call daemon to start sessions in parallel
+      const result = await requestDaemon<{
+        results: Array<{
+          id: string;
+          status: string;
+          error?: string;
+        }>;
+      }>('session.start', { ids, maxParallel });
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      // Display results
+      console.log(`\n${BOLD}Starting Sessions${RESET}\n`);
+
+      for (const r of result.results) {
+        if (r.error) {
+          console.log(`${RED}✗${RESET} ${BOLD}${r.id.slice(0, 8)}...${RESET} ${RED}${r.error}${RESET}`);
+        } else {
+          console.log(`${GREEN}✓${RESET} ${BOLD}${r.id.slice(0, 8)}...${RESET} ${GRAY}→ ${r.status}${RESET}`);
+        }
+      }
+
+      const success = result.results.filter(r => !r.error).length;
+      const errors = result.results.filter(r => r.error).length;
+      console.log(`\n${GRAY}Started: ${success}, Errors: ${errors}${RESET}`);
     });
 
   session

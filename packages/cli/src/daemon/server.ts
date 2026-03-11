@@ -536,6 +536,37 @@ export class AgentNetworkDaemonServer {
         return { session: this.runtime.stopSession(id) };
       }
 
+      case 'session.start': {
+        const ids = request.params?.ids;
+        if (!Array.isArray(ids) || ids.length === 0) {
+          throw new Error('ids array is required');
+        }
+        const maxParallel = typeof request.params?.maxParallel === 'number'
+          ? Math.max(1, Math.min(request.params.maxParallel, 20))
+          : 4;
+
+        // Start sessions in parallel
+        const results: Array<{ id: string; status: string; error?: string }> = [];
+
+        // Process in batches
+        for (let i = 0; i < ids.length; i += maxParallel) {
+          const batch = ids.slice(i, i + maxParallel);
+          const batchResults = await Promise.all(
+            batch.map(async (id: string) => {
+              try {
+                const session = this.runtime.startSession(id);
+                return { id, status: session.status, error: undefined };
+              } catch (err) {
+                return { id, status: '', error: err instanceof Error ? err.message : String(err) };
+              }
+            })
+          );
+          results.push(...batchResults);
+        }
+
+        return { results };
+      }
+
       case 'session.archive': {
         const id = expectString(request.params?.id, 'id');
         const session = this.store.archiveSession(id);
