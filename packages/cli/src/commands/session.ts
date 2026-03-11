@@ -21,7 +21,8 @@ export function registerSessionCommand(program: Command): void {
     .option('--search <text>', 'Search in session title')
     .option('--limit <number>', 'Limit number of results', parseInt)
     .option('--json', 'Output JSON')
-    .action(async (opts: { agent?: string; taskGroup?: string; status: string; tag?: string; search?: string; limit?: number; json?: boolean }) => {
+    .option('--short', 'Output only session IDs (one per line)')
+    .action(async (opts: { agent?: string; taskGroup?: string; status: string; tag?: string; search?: string; limit?: number; json?: boolean; short?: boolean }) => {
       await ensureDaemonRunning();
       const result = await requestDaemon<{ sessions: Array<{
         id: string;
@@ -40,6 +41,13 @@ export function registerSessionCommand(program: Command): void {
       });
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      if (opts.short) {
+        for (const s of result.sessions) {
+          console.log(s.id);
+        }
         return;
       }
 
