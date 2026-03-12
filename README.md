@@ -1,255 +1,188 @@
-# Agent Network (ah)
+# ah-cli — 本地 AI Agent 管理工具
 
-[![npm version](https://img.shields.io/npm/v/@annals/agent-network.svg)](https://www.npmjs.com/package/@annals/agent-network)
-[![npm downloads](https://img.shields.io/npm/dm/@annals/agent-network.svg)](https://www.npmjs.com/package/@annals/agent-network)
-[![license](https://img.shields.io/github/license/annals-ai/ah-cli.svg)](./LICENSE)
+<a href="https://www.npmjs.com/package/@annals/agent-network"><img src="https://img.shields.io/npm/v/@annals/agent-network.svg" alt="npm version"></a>
+<a href="https://www.npmjs.com/package/@annals/agent-network"><img src="https://img.shields.io/npm/dm/@annals/agent-network.svg" alt="npm downloads"></a>
+<a href="./LICENSE"><img src="https://img.shields.io/github/license/annals-ai/ah-cli.svg" alt="license"></a>
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
-Agent Network is a daemon-first local runtime for managing many AI agents and many sessions on one machine, with optional provider exposure such as [Agents.Hot](https://agents.hot). It ships a local Web UI for inspecting transcripts, tasks, exposure state, and logs without pushing full history to the platform.
+**在本地机器上运行、管理和分享 AI Agent。** 不需要把对话历史上传到云端，所有数据留在本地。
 
-## Installation
+## 为什么需要 ah-cli？
+
+- **一个界面管理所有 Agent** — 无需在多个标签页之间切换
+- **本地优先** — 对话历史、任务记录全在 SQLite，不上传云端
+- **一键分享** — 把本地 Agent 暴露到 [Agents.Hot](https://agents.hot)，像发 npm 包一样分享你的 Agent
+- **多 Agent 协作** — 并行调用多个 Agent，完成复杂任务
+
+## 5 秒开始
 
 ```bash
-# Install globally with npm
+# 1. 安装
 npm install -g @annals/agent-network
 
-# Or with pnpm
-pnpm add -g @annals/agent-network
-
-# Or with yarn
-yarn global add @annals/agent-network
-```
-
-After installation, the `ah` CLI will be available globally.
-
-## Quickstart
-
-```bash
-# Authenticate with the platform
-ah login
-
-# Start the local daemon
+# 2. 启动守护进程（后台运行）
 ah daemon start
 
-# Open the local Web UI
-ah ui open
+# 3. 添加一个 Agent（指向你的项目目录）
+ah agent add --name "Code Reviewer" --project /path/to/your/project
 
-# Register a local agent
-ah agent add --name "Code Reviewer" --project /path/to/project
+# 4. 开始对话
+ah chat "Code Reviewer" "帮我审查这段代码"
+```
 
-# Chat with your agent
-ah chat "Code Reviewer" "Review this codebase"
+搞定！现在你拥有了一个本地的 Code Review Agent。
 
-# Expose agent to Agents.Hot platform
+## 常用命令
+
+| 场景 | 命令 |
+|------|------|
+| 启动服务 | `ah daemon start` |
+| 打开 Web UI | `ah ui open` |
+| 添加 Agent | `ah agent add --name "My Agent" --project ./my-project` |
+| 对话 | `ah chat "My Agent" "你的问题"` |
+| 分享 Agent | `ah agent expose "My Agent" --provider agents-hot` |
+| 查看状态 | `ah status` |
+
+完整命令参考见下方。
+
+## 使用场景
+
+### 场景 1：项目专属 AI 助手
+
+```bash
+# 为你的项目创建一个专门的 Agent
+ah agent add --name "我的项目助手" \
+  --project ./my-app \
+  --persona "你是一个熟悉 React 和 TypeScript 的资深工程师"
+
+# 后续直接对话
+ah chat "我的项目助手" "这个 bug 怎么修？"
+```
+
+### 场景 2：团队共享 Agent
+
+```bash
+# 把 Agent 暴露到平台，团队成员都能调用
 ah agent expose "Code Reviewer" --provider agents-hot
 
-# Or expose via generic A2A on a local port
-ah agent expose "Code Reviewer" --provider generic-a2a --config-json '{"port":4123,"bearerToken":"secret"}'
+# 团队成员可以通过 agents.hot 调用
+ah call annals/code-reviewer --task "Review my PR"
 ```
 
-## Core Concepts
-
-- **One local daemon per machine** — The daemon manages all agents and sessions
-- **Many local agents** — Each agent has its own project directory and configuration
-- **Many sessions per agent** — Track conversation history and state
-- **Task groups** — Organize related sessions for complex workflows
-- **Optional provider bindings** — Expose agents online via Agents.Hot or generic A2A
-- **Local Web UI** — Inspect transcripts, tasks, providers, and logs locally
-
-The daemon stores all state locally in SQLite. Full transcript history stays on your machine.
-
-## Commands Reference
-
-### Authentication & Status
+### 场景 3：多 Agent 协作
 
 ```bash
-ah login                    # Authenticate with Agents.Hot platform
-ah status                   # Show daemon, agents, and auth status
+# 并行调用多个 Agent
+ah fan-out --agents "Agent A,Agent B" --task "分析这个问题"
 ```
 
-### Daemon Management
+### 场景 4：扩展能力（MCP）
 
 ```bash
-ah daemon start             # Start the local daemon
-ah daemon stop              # Stop the local daemon
-ah daemon status            # Show daemon status
-ah daemon logs              # View daemon logs
+# 添加 MCP 工具（比如文件系统、Git、浏览器等）
+ah mcp add filesystem "/path/to/mcp-server"
+
+# Agent 自动获得新能力
+ah chat "My Agent" "列出这个目录的所有文件"
 ```
 
-### Web UI
+## 本地 Web UI
+
+启动后访问 http://localhost:3456 可以：
+- 查看所有 Agent 和会话
+- 回溯对话历史
+- 检查任务状态和日志
 
 ```bash
-ah ui serve                 # Ensure UI is running, print URL
-ah ui open                  # Open Web UI in browser
+ah ui open  # 自动打开浏览器
 ```
 
-### Agent Management
+## 命令参考
+
+### 基础
 
 ```bash
-ah agent add --name <name> --project <path>  # Register a new agent
-ah agent list                               # List all local agents
-ah agent show <ref>                         # Show agent details
-ah agent update <ref>                       # Update agent config
-ah agent remove <ref>                       # Remove an agent
-ah agent clone <ref> --name <new-name>      # Clone an agent
-
-# Expose agent to platforms
-ah agent expose <ref> --provider agents-hot
-ah agent expose <ref> --provider generic-a2a --config-json '{"port":4123}'
-ah agent unexpose <ref> --provider <name>
+ah login               # 登录 Agents.Hot
+ah status              # 查看整体状态
+ah daemon start        # 启动守护进程
+ah daemon stop         # 停止守护进程
 ```
 
-**Agent Add Options:**
-- `--name <name>` — Agent name (required)
-- `--project <path>` — Project directory (required)
-- `--runtime-type <type>` — Runtime type (default: `claude`)
-- `--sandbox` — Enable sandbox/workspace isolation
-- `--persona <text>` — Persona/role prompt
-- `--description <text>` — Agent description
-- `--visibility <visibility>` — `public`, `private`, or `unlisted`
-- `--capabilities <caps>` — Comma-separated capabilities
-
-### Chat & Sessions
+### Agent 管理
 
 ```bash
-ah chat <agent> [message]           # Chat with an agent
-ah session list                     # List all sessions
-ah session show <id>                # Show session details
-ah session attach <id> [message]    # Attach to a session
-ah session fork <id>                # Fork a session
-ah session stop <id>                # Stop active work
-ah session archive <id>             # Archive a session
-ah session restore [id]             # Restore a recent session
+ah agent add --name <name> --project <path>    # 添加 Agent
+ah agent list                                  # 列出所有 Agent
+ah agent show <ref>                            # 查看详情
+ah agent update <ref>                          # 更新配置
+ah agent remove <ref>                          # 删除
+ah agent clone <ref> --name <new>              # 克隆
+ah agent expose <ref> --provider agents-hot    # 暴露到平台
 ```
 
-### Tasks
+**Agent 选项：**
+- `--name` — 名称（必填）
+- `--project` — 项目目录（必填）
+- `--runtime-type` — 运行时，默认 `claude`
+- `--sandbox` — 启用沙箱隔离
+- `--persona` — 角色设定
+- `--description` — 描述
+- `--capabilities` — 能力标签
+
+### 会话
 
 ```bash
-ah task create --title "..."        # Create a task group
-ah task list                        # List task groups
-ah task show <id>                   # Show task with sessions
-ah task archive <id>                # Archive a task group
+ah chat <agent> [message]       # 对话
+ah session list                 # 列出会话
+ah session show <id>            # 查看会话
+ah session attach <id>          # 接入会话
+ah session fork <id>            # 叉一个分支
+ah session stop <id>            # 停止运行
 ```
 
-### Skills
+### 技能（Skills）
 
 ```bash
-ah skills init [path]                        # Initialize a new skill project
-ah skills pack [path]                        # Pack skill into .zip file
-ah skills publish [path]                     # Publish to agents.hot
-ah skills info <author/slug>                 # View skill details
-ah skills list                               # List your published skills
-ah skills unpublish <author/slug>            # Unpublish a skill
-ah skills version <bump> [path]              # Bump version (patch|minor|major|x.y.z)
-ah skills install <author/slug> [path]       # Install a skill
-ah skills update [ref] [path]                # Update installed skills
-ah skills remove <slug> [path]               # Remove a locally installed skill
-ah skills installed [path]                   # List installed skills
+ah skills init [path]           # 初始化技能项目
+ah skills pack [path]           # 打包
+ah skills publish [path]        # 发布到平台
+ah skills install <author/slug> # 安装技能
+ah skills list                  # 列出已发布
 ```
 
-### MCP Servers
+### MCP
 
 ```bash
-ah mcp add <name> <command> [args...]  # Add an MCP server
-ah mcp import                          # Import from ~/.vscode/mcp.json
-ah mcp list                            # List configured MCP servers
-ah mcp remove <name>                    # Remove an MCP server
+ah mcp add <name> <command>     # 添加 MCP 服务器
+ah mcp list                     # 列出已配置
+ah mcp remove <name>            # 移除
 ```
 
-### Discovery & Network
+### 发现与调用
 
 ```bash
-ah discover --capability <keyword>     # Discover agents by capability
-ah call <agent> --task "..."           # Call an agent on the A2A network
-ah fan-out --agents <list> --task "..." # Run task across multiple agents
+ah discover --capability <关键词>  # 发现 Agent
+ah call <agent> --task "任务"      # 调用远程 Agent
+ah fan-out --agents <列表> --task "任务"  # 多 Agent 并行
 ```
 
-### Subscriptions
+## 开发
 
 ```bash
-ah subscribe <author-login>            # Subscribe to an author
-ah unsubscribe <author-login>          # Unsubscribe from an author
-ah subscriptions                        # List your subscriptions
-```
-
-### Profile & Config
-
-```bash
-ah profile                              # Manage profile settings
-ah config                               # Manage CLI configuration
-```
-
-## Sandbox Mode
-
-By default, agents work directly inside their `--project` directory. Enable sandbox mode for isolated workspaces:
-
-```bash
-ah agent add --name "Sandbox Agent" --project ./my-project --sandbox
-```
-
-Sandbox mode creates an isolated workspace for file-oriented flows.
-
-## Provider Examples
-
-### Agents.Hot (Cloud Ingress)
-
-```bash
-# Expose agent to Agents.Hot platform
-ah agent expose "Code Reviewer" --provider agents-hot
-
-# The agent becomes accessible at agents.hot
-```
-
-### Generic A2A (Local HTTP)
-
-```bash
-# Expose via local HTTP with bearer token auth
-ah agent expose "Code Reviewer" \
-  --provider generic-a2a \
-  --config-json '{"port":4123,"bearerToken":"your-secret-token"}'
-
-# Access via HTTP at http://localhost:4123
-```
-
-## Development
-
-```bash
-# Clone the repository
 git clone https://github.com/annals-ai/ah-cli.git
 cd ah-cli
-
-# Install dependencies
 pnpm install
-
-# Build
 pnpm build
-
-# Run tests
 pnpm test
-
-# Lint
-pnpm lint
 ```
 
-## Repository Structure
+## 相关链接
 
-```
-ah-cli/
-├── packages/
-│   ├── cli/       # The ah CLI
-│   ├── ui/        # Local Web UI
-│   ├── protocol/  # Bridge protocol types
-│   └── worker/    # Bridge worker / durable objects
-├── tests/
-├── docs/
-└── CLAUDE.md
-```
-
-## Documentation
-
-Full documentation: [https://agents.hot/docs/cli](https://agents.hot/docs/cli)
+- [完整文档](https://agents.hot/docs/cli)
+- [Agents.Hot 平台](https://agents.hot)
+- [问题反馈](https://github.com/annals-ai/ah-cli/issues)
 
 ## License
 
-MIT — see [LICENSE](./LICENSE)
+MIT — 见 [LICENSE](./LICENSE)
