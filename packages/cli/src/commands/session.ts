@@ -1556,6 +1556,131 @@ export function registerSessionCommand(program: Command): void {
       console.log(`${GRAY}Completed: ${completed}${RESET}  ${errors > 0 ? RED + `Errors: ${errors}` + RESET : ''}`);
     });
 
+  // --- Session stats: show session statistics ---
+  session
+    .command('stats')
+    .description('Show session statistics (counts by status, agents, recent activity)')
+    .option('--json', 'Output JSON')
+    .action(async (opts: { json?: boolean }) => {
+      await ensureDaemonRunning();
+
+      // Get all sessions
+      const result = await requestDaemon<{
+        sessions: Array<{
+          id: string;
+          title: string | null;
+          status: string;
+          lastActiveAt: string;
+          createdAt: string;
+          agentId: string;
+          agentName?: string;
+        }>;
+      }>('session.list', { status: 'all' });
+
+      const sessions = result.sessions;
+
+      if (opts.json) {
+        // Calculate stats for JSON output
+        const statusCounts: Record<string, number> = {};
+        const agentCounts: Record<string, number> = {};
+        let activeToday = 0;
+        let activeThisWeek = 0;
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const oneWeekMs = 7 * oneDayMs;
+
+        for (const s of sessions) {
+          statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
+          const agentName = s.agentName || s.agentId?.slice(0, 8) || 'unknown';
+          agentCounts[agentName] = (agentCounts[agentName] || 0) + 1;
+          const lastActive = new Date(s.lastActiveAt).getTime();
+          if (now - lastActive < oneDayMs) activeToday++;
+          if (now - lastActive < oneWeekMs) activeThisWeek++;
+        }
+
+        console.log(JSON.stringify({
+          total: sessions.length,
+          byStatus: statusCounts,
+          byAgent: agentCounts,
+          activeToday,
+          activeThisWeek,
+        }, null, 2));
+        return;
+      }
+
+      // Human-readable output
+      console.log(`\n${BOLD}Session Statistics${RESET}\n`);
+
+      // Status breakdown
+      const statusCounts: Record<string, number> = {};
+      const statusConfig: Record<string, { color: string; symbol: string }> = {
+        running: { color: GREEN, symbol: '●' },
+        active: { color: GREEN, symbol: '●' },
+        idle: { color: GRAY, symbol: '○' },
+        paused: { color: YELLOW, symbol: '◐' },
+        failed: { color: RED, symbol: '✗' },
+        completed: { color: GRAY, symbol: '✓' },
+        archived: { color: GRAY, symbol: '◇' },
+        queued: { color: GRAY, symbol: '○' },
+      };
+
+      for (const s of sessions) {
+        statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
+      }
+
+      console.log(`  ${BOLD}By Status:${RESET}`);
+      const statusOrder = ['active', 'running', 'idle', 'paused', 'completed', 'failed', 'archived'];
+      for (const status of statusOrder) {
+        if (statusCounts[status]) {
+          const config = statusConfig[status] || { color: GRAY, symbol: '○' };
+          console.log(`    ${config.color}${config.symbol}${RESET}  ${status.padEnd(10)} ${statusCounts[status].toString().padStart(4)}`);
+        }
+      }
+      // Any other statuses not in the order
+      for (const [status, count] of Object.entries(statusCounts)) {
+        if (!statusOrder.includes(status)) {
+          console.log(`    ${GRAY}○${RESET}  ${status.padEnd(10)} ${count.toString().padStart(4)}`);
+        }
+      }
+
+      // Agent breakdown
+      const agentCounts: Record<string, number> = {};
+      for (const s of sessions) {
+        const agentName = s.agentName || s.agentId?.slice(0, 8) || 'unknown';
+        agentCounts[agentName] = (agentCounts[agentName] || 0) + 1;
+      }
+
+      console.log(`\n  ${BOLD}By Agent:${RESET}`);
+      const sortedAgents = Object.entries(agentCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      for (const [agent, count] of sortedAgents) {
+        console.log(`    ${GRAY}•${RESET}  ${agent.padEnd(15)} ${count.toString().padStart(4)}`);
+      }
+      if (Object.keys(agentCounts).length > 10) {
+        console.log(`    ${GRAY}... and ${Object.keys(agentCounts).length - 10} more${RESET}`);
+      }
+
+      // Recent activity
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const oneWeekMs = 7 * oneDayMs;
+      let activeToday = 0;
+      let activeThisWeek = 0;
+
+      for (const s of sessions) {
+        const lastActive = new Date(s.lastActiveAt).getTime();
+        if (now - lastActive < oneDayMs) activeToday++;
+        if (now - lastActive < oneWeekMs) activeThisWeek++;
+      }
+
+      console.log(`\n  ${BOLD}Recent Activity:${RESET}`);
+      console.log(`    ${GREEN}●${RESET}  Active today:      ${activeToday.toString().padStart(4)}`);
+      console.log(`    ${YELLOW}◐${RESET}  Active this week:  ${activeThisWeek.toString().padStart(4)}`);
+
+      // Summary
+      console.log(`\n  ${GRAY}────────────────────────────${RESET}`);
+      console.log(`  ${BOLD}Total Sessions: ${sessions.length}${RESET}\n`);
+    });
+
   // --- Session prune: clean up old/unused sessions ---
   session
     .command('prune')
