@@ -914,6 +914,169 @@ export function registerSessionCommand(program: Command): void {
       });
     });
 
+  // --- Session resume: alias for 'restore' ---
+  session
+    .command('resume [id]')
+    .description('Resume a recent session (alias for restore)')
+    .option('--limit <number>', 'Number of recent sessions to show', '10')
+    .option('--last', 'Resume the most recent session automatically (no prompt)')
+    .option('--json', 'Output JSON')
+    .action(async (id: string | undefined, opts: { limit?: string; last?: boolean; json?: boolean }) => {
+      await ensureDaemonRunning();
+
+      const limit = parseInt(opts.limit ?? '10', 10);
+
+      // If session ID provided directly, resume it
+      if (id) {
+        const sessionInfo = await requestDaemon<{
+          session: { id: string; title: string | null; status: string; lastActiveAt: string };
+        }>('session.show', { id });
+
+        if (opts.json) {
+          console.log(JSON.stringify(sessionInfo, null, 2));
+          return;
+        }
+
+        log.info(`Resuming session: ${BOLD}${sessionInfo.session.title || sessionInfo.session.id}${RESET}`);
+        console.log(`${GRAY}Session ID: ${sessionInfo.session.id}${RESET}`);
+        console.log(`${GRAY}Status: ${sessionInfo.session.status}${RESET}\n`);
+
+        // Start interactive chat with this session
+        await interactiveSessionResume(id);
+        return;
+      }
+
+      // Otherwise, list recent sessions for user to choose
+      const result = await requestDaemon<{
+        sessions: Array<{
+          id: string;
+          title: string | null;
+          status: string;
+          lastActiveAt: string;
+          agentId: string;
+        }>;
+      }>('session.list', { status: 'active,idle,paused' });
+
+      // If --last flag provided, auto-resume most recent session
+      if (opts.last && result.sessions.length > 0) {
+        const mostRecent = result.sessions[0];
+        if (opts.json) {
+          console.log(JSON.stringify({ session: mostRecent }, null, 2));
+          return;
+        }
+        log.info(`Resuming most recent session: ${BOLD}${mostRecent.title || mostRecent.id}${RESET}`);
+        console.log(`${GRAY}Session ID: ${mostRecent.id}${RESET}`);
+        console.log(`${GRAY}Status: ${mostRecent.status}${RESET}\n`);
+        await interactiveSessionResume(mostRecent.id);
+        return;
+      }
+
+      if (opts.last && result.sessions.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify({ session: null, error: 'No sessions found' }, null, 2));
+          return;
+        }
+        log.info('No recent sessions found. Start a new chat with "ah chat <agent>"');
+        return;
+      }
+
+      const recentSessions = result.sessions.slice(0, limit);
+
+      if (recentSessions.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify({ sessions: [] }, null, 2));
+          return;
+        }
+        log.info('No recent sessions found. Start a new chat with "ah chat <agent>"');
+        return;
+      }
+
+      // JSON output
+      if (opts.json) {
+        console.log(JSON.stringify({ sessions: recentSessions }, null, 2));
+        return;
+      }
+
+      // Display sessions with numbers for selection
+      console.log(`\n${BOLD}Recent Sessions${RESET} (showing ${recentSessions.length} most recent):\n`);
+      console.log(`  ${GRAY}#  Status   Last Active            Title / ID${RESET}`);
+      console.log(`  ${GRAY}-- -------- ---------------------- -----------------${RESET}`);
+
+      const now = new Date();
+      for (let i = 0; i < recentSessions.length; i++) {
+        const s = recentSessions[i];
+        const statusColor = s.status === 'active' ? GREEN : s.status === 'idle' ? YELLOW : GRAY;
+        const statusStr = `${statusColor}${s.status.padEnd(8)}${RESET}`;
+
+        // Format relative time
+        const lastActive = new Date(s.lastActiveAt);
+        const diffMs = now.getTime() - lastActive.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        let timeStr: string;
+        if (diffMins < 1) timeStr = 'just now';
+        else if (diffMins < 60) timeStr = `${diffMins}m ago`;
+        else if (diffHours < 24) timeStr = `${diffHours}h ago`;
+        else timeStr = `${diffDays}d ago`;
+
+        const title = s.title || '(untitled)';
+        const titleDisplay = title.length > 25 ? title.slice(0, 22) + '...' : title;
+
+        console.log(`  ${GREEN}${(i + 1).toString().padStart(2)}${RESET}  ${statusStr}  ${GRAY}${timeStr.padEnd(8)}${RESET}  ${titleDisplay}`);
+        console.log(`           ${GRAY}${s.id.slice(0, 40)}...${RESET}`);
+      }
+
+      console.log(`\n${GRAY}Enter the number to resume that session, or 'q' to quit.${RESET}`);
+
+      let isResuming = false;
+
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: `${GREEN}> ${RESET}`,
+      });
+
+      rl.prompt();
+
+      rl.on('line', async (line: string) => {
+        const trimmed = line.trim().toLowerCase();
+
+        if (trimmed === 'q' || trimmed === 'quit' || trimmed === 'exit') {
+          rl.close();
+          return;
+        }
+
+        const choiceNum = parseInt(trimmed, 10);
+
+        if (isNaN(choiceNum) || choiceNum < 1 || choiceNum > recentSessions.length) {
+          console.log(`${YELLOW}Invalid choice. Enter a number between 1 and ${recentSessions.length}, or 'q' to quit.${RESET}`);
+          rl.prompt();
+          return;
+        }
+
+        const selectedSession = recentSessions[choiceNum - 1];
+
+        console.log(`\n${GRAY}Resuming session: ${BOLD}${selectedSession.title || selectedSession.id}${RESET}\n`);
+
+        // Mark that we're resuming so the close handler doesn't exit
+        isResuming = true;
+        rl.close();
+
+        // Resume the session (this takes over the terminal)
+        await interactiveSessionResume(selectedSession.id);
+      });
+
+      rl.on('close', () => {
+        // Only exit if we're NOT resuming a session
+        // (i.e., user pressed 'q' to quit)
+        if (!isResuming) {
+          process.exit(0);
+        }
+      });
+    });
+
   // --- Session export: export session to JSON or markdown ---
   session
     .command('export <id>')

@@ -71,11 +71,11 @@ export function registerStatusCommand(program: Command): void {
           console.log(`Daemon: ${daemon.running ? `${GREEN}running${RESET}` : `${YELLOW}stopped${RESET}`}`);
           console.log(`Socket: ${daemon.socketPath}`);
           console.log(`Log:    ${daemon.logPath}`);
-          console.log(`Started: ${runtime.startedAt}`);
-          console.log(`Agents:  ${runtime.agents}`);
-          console.log(`Tasks:   ${runtime.taskGroups}`);
-          console.log(`Sessions:${runtime.sessions}`);
-          console.log(`Expose:  ${activeBindings}`);
+          console.log(`Started:${runtime.startedAt}`);
+          console.log(`Agents: ${runtime.agents}`);
+          console.log(`Tasks:  ${runtime.taskGroups}`);
+          console.log(`Sessions: ${runtime.sessions}`);
+          console.log(`Expose: ${activeBindings}`);
         }
       } else {
         if (!opts.json) {

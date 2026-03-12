@@ -52,11 +52,43 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function handleError(err: unknown): never {
+function handleError(err: unknown, opts?: { json?: boolean }): never {
+  let errorMessage = '';
+  let errorHint = '';
+  let errorCode = '';
+
   if (err instanceof PlatformApiError) {
-    log.error(err.message);
+    errorMessage = err.message;
+    errorCode = err.errorCode;
+    // Add hints for common errors
+    if (err.errorCode === 'unauthorized') {
+      errorHint = 'Run `ah login` to authenticate.';
+    } else if (err.errorCode === 'subscription_required') {
+      errorHint = 'Subscribe to the agent first: ah subscribe <author-login>';
+    } else if (err.errorCode === 'agent_offline') {
+      errorHint = 'Start the agent first: ah agent start <agent-name>';
+    } else if (err.errorCode === 'not_found') {
+      errorHint = 'Use `ah discover` to find available agents.';
+    }
+  } else if ((err as Error).name === 'AbortError') {
+    errorMessage = 'Request timed out';
+    errorHint = 'Use --timeout to increase timeout duration.';
   } else {
-    log.error((err as Error).message);
+    errorMessage = (err as Error).message;
+  }
+
+  if (opts?.json) {
+    console.log(JSON.stringify({
+      type: 'error',
+      message: errorMessage,
+      code: errorCode,
+      hint: errorHint || undefined,
+    }));
+  } else {
+    log.error(errorMessage);
+    if (errorHint) {
+      console.log(`  ${GRAY}Hint: ${errorHint}${RESET}`);
+    }
   }
   process.exit(1);
 }
@@ -836,9 +868,10 @@ export function registerCallCommand(program: Command): void {
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           log.error('Call timed out');
+          console.log(`  ${GRAY}Hint: Use --timeout to increase timeout duration.${RESET}`);
           process.exit(1);
         }
-        handleError(err);
+        handleError(err, { json: opts.json });
       }
     });
 }
