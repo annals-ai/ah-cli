@@ -603,40 +603,48 @@ export class AgentNetworkDaemonServer {
 
       case 'session.show': {
         const id = expectString(request.params?.id, 'id');
-        const session = this.store.getSession(id);
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        const session = this.store.getSession(resolvedId);
         if (!session) throw new Error(`Session not found: ${id}`);
         const agent = this.store.getAgentById(session.agentId);
         return {
           session,
           agent,
-          messages: this.store.getSessionMessages(id),
+          messages: this.store.getSessionMessages(resolvedId),
         };
       }
 
       case 'session.attach': {
         const id = expectString(request.params?.id, 'id');
-        const session = this.store.getSession(id);
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        const session = this.store.getSession(resolvedId);
         if (!session) throw new Error(`Session not found: ${id}`);
         const agent = this.store.getAgentById(session.agentId);
         return {
           session,
           agent,
-          messages: this.store.getSessionMessages(id),
+          messages: this.store.getSessionMessages(resolvedId),
         };
       }
 
       case 'session.messages': {
         const id = expectString(request.params?.id, 'id');
-        const session = this.store.getSession(id);
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        const session = this.store.getSession(resolvedId);
         if (!session) throw new Error(`Session not found: ${id}`);
-        const messages = this.store.getSessionMessages(id);
+        const messages = this.store.getSessionMessages(resolvedId);
         return { messages };
       }
 
       case 'session.fork': {
         const id = expectString(request.params?.id, 'id');
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
         const session = this.store.forkSession({
-          sourceSessionId: id,
+          sourceSessionId: resolvedId,
           taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
           title: typeof request.params?.title === 'string' ? request.params.title : undefined,
           tags: normalizeTags(request.params?.tags),
@@ -762,8 +770,10 @@ export class AgentNetworkDaemonServer {
 
       case 'session.delete': {
         const id = expectString(request.params?.id, 'id');
-        this.store.deleteSession(id);
-        return { deleted: true, id };
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        this.store.deleteSession(resolvedId);
+        return { deleted: true, id: resolvedId };
       }
 
       case 'session.run': {
