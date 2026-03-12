@@ -21,7 +21,8 @@ export function registerDoctorCommand(program: Command): void {
     .command('doctor')
     .description('Diagnose common issues with ah CLI setup')
     .option('--json', 'Output JSON')
-    .action(async (opts: { json?: boolean }) => {
+    .option('--fix', 'Show fix suggestions for issues')
+    .action(async (opts: { json?: boolean; fix?: boolean }) => {
       const results: CheckResult[] = [];
 
       // Check 1: Config file exists and is valid
@@ -196,6 +197,29 @@ export function registerDoctorCommand(program: Command): void {
       } else {
         console.log(`  ${GREEN}All systems healthy!${RESET}`);
       }
-      console.log('');
+
+      // Show fix suggestions if --fix flag is provided
+      if (opts.fix && (errorCount > 0 || warnCount > 0)) {
+        console.log(`\n  ${BOLD}Fix Suggestions:${RESET}`);
+        for (const result of results) {
+          if (result.status !== 'ok') {
+            const icon = result.status === 'error' ? '❌' : '⚠️';
+            console.log(`  ${icon} ${result.name}:`);
+            if (result.name === 'Daemon' && result.status === 'warn') {
+              console.log(`      ${CYAN}ah daemon start${RESET} - Start the local daemon`);
+            }
+            if (result.name === 'Auth' && result.status === 'warn') {
+              console.log(`      ${CYAN}ah login${RESET} - Authenticate with the platform`);
+            }
+            if (result.name === 'Config' && result.status === 'error') {
+              console.log(`      ${CYAN}ah config reset --force${RESET} - Reset corrupted config`);
+            }
+            if (result.name === 'Agents' && result.status === 'warn') {
+              console.log(`      ${CYAN}ah agent add --name <name> --project <path>${RESET} - Add your first agent`);
+            }
+          }
+        }
+        console.log('');
+      }
     });
 }

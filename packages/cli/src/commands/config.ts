@@ -159,9 +159,53 @@ export function registerConfigCommand(program: Command): void {
       console.log(`   queue_max_length: ${DEFAULT_RUNTIME_CONFIG.queue_max_length}\n`);
     });
 
+  configCmd
+    .command('reset')
+    .description('Reset configuration to defaults (removes all agents and settings)')
+    .option('-f, --force', 'Skip confirmation prompt')
+    .action(async (opts: { force?: boolean }) => {
+      const configPath = getConfigPath();
+
+      if (!existsSync(configPath)) {
+        log.info('No configuration file exists. Nothing to reset.');
+        return;
+      }
+
+      // Ask for confirmation unless --force is provided
+      if (!opts.force) {
+        console.log(`\n${YELLOW}This will delete your configuration file:${RESET}`);
+        console.log(`  ${configPath}\n`);
+        console.log(`${YELLOW}This will NOT affect your running agents or sessions.${RESET}\n`);
+
+        const readline = require('node:readline').createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        const answer = await new Promise<string>((resolve) => {
+          readline.question('Are you sure? [y/N] ', (ans: string) => {
+            readline.close();
+            resolve(ans.trim().toLowerCase());
+          });
+        });
+
+        if (answer !== 'y' && answer !== 'yes') {
+          log.info('Aborted.');
+          return;
+        }
+      }
+
+      // Delete the config file
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(configPath);
+
+      log.success('Configuration reset to defaults.');
+      console.log(`\n  ${GRAY}A fresh configuration will be created on next use.${RESET}\n`);
+    });
+
   // Auto prune configuration
   const autoPruneCmd = configCmd
-    .command('autoprun')
+    .command('autoprune')
     .description('Configure automatic session cleanup on daemon start');
 
   autoPruneCmd
@@ -188,7 +232,7 @@ export function registerConfigCommand(program: Command): void {
 
       if (!config.enabled) {
         console.log(`${GRAY}Auto prune is disabled. Enable with:${RESET}`);
-        console.log(`  ${GREEN}ah config autoprun enable${RESET}\n`);
+        console.log(`  ${GREEN}ah config autoprune enable${RESET}\n`);
       }
     });
 

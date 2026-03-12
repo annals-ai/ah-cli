@@ -553,6 +553,46 @@ export class DaemonStore {
     return row ? this.mapSession(row) : null;
   }
 
+  /**
+   * Resolve a session reference (full ID or short prefix) to a full session ID.
+   * - If the ID is a full UUID (36 chars), return it directly
+   * - If it's a short prefix, find sessions that start with it
+   * - Returns the full ID if exactly one match, null if not found
+   * - Throws with ambiguous matches if multiple sessions match
+   */
+  resolveSessionRef(ref: string): string | null {
+    // If it looks like a full UUID, try exact match first
+    if (ref.length === 36 && ref.includes('-')) {
+      const session = this.getSession(ref);
+      return session ? session.id : null;
+    }
+
+    // Short ID prefix matching
+    const rows = this.db.prepare(`
+      SELECT id, title, status FROM sessions WHERE id LIKE ? ESCAPE '\\'
+    `).all(`${ref}%`) as Array<{ id: string; title: string | null; status: string }>;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    if (rows.length === 1) {
+      return rows[0].id;
+    }
+
+    // Multiple matches - throw with helpful error
+    const matches = rows.map(r => ({
+      id: r.id.slice(0, 8),
+      title: r.title?.slice(0, 40) || '(no title)',
+      status: r.status,
+    }));
+
+    // Create a custom error that includes the matches
+    const error = new Error(`Ambiguous session ID "${ref}" matches ${rows.length} sessions`);
+    (error as Error & { ambiguousMatches?: typeof matches }).ambiguousMatches = matches;
+    throw error;
+  }
+
   listSessions(query: SessionQuery = {}): SessionRecord[] {
     const clauses: string[] = [];
     const params: SqlPrimitive[] = [];
