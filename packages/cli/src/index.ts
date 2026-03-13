@@ -44,7 +44,7 @@ program.configureOutput({
   outputError: (str, write) => {
     write(str);
     if (str.trim().length > 0) {
-      write('\nDocs: https://agents.hot/docs/cli\n');
+      write('\nDocs: https://agents.hot/docs/cli-reference\n');
     }
   },
 });
@@ -83,7 +83,7 @@ program
         .filter((name) => name !== 'help');
       console.log(JSON.stringify({
         name: 'ah',
-        docs: 'https://agents.hot/docs/cli',
+        docs: 'https://agents.hot/docs/cli-reference',
         commands,
       }));
       return;
@@ -93,7 +93,7 @@ program
 
 const wantsJsonOutput = process.argv.includes('--json');
 if (!wantsJsonOutput && !process.argv.includes('--version') && !process.argv.includes('-v')) {
-  maybePrintDocsHint('https://agents.hot/docs/cli');
+  maybePrintDocsHint('https://agents.hot/docs/cli-reference');
 }
 
 program.parse();
