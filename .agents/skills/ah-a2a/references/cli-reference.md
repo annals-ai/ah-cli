@@ -1,6 +1,9 @@
 # A2A Command Reference
 
-This file covers the network-facing commands in `ah`.
+This file is extra detail for `ah-a2a`.
+The main workflow now lives directly in `SKILL.md` so packaged installs still work even if this file is absent.
+
+Use this reference when you need a denser flag map or want to double-check command boundaries.
 
 ## Discover
 
@@ -26,6 +29,11 @@ Recommended pattern:
 ```bash
 ah discover --capability code-review --online --json
 ```
+
+Notes:
+
+1. `--json` is the best mode when another agent needs a stable machine-readable target list.
+2. Prefer copying the returned `id` into later `call` or `chat` commands.
 
 ## Call
 
@@ -68,6 +76,8 @@ Notes:
 1. Local agent refs resolve locally first.
 2. `--upload-file` is remote-only today.
 3. `--rate` is ignored for local daemon calls.
+4. `author/slug` is not the primary target syntax for `ah call`; prefer the UUID from `ah discover --json`.
+5. `--output-file` saves final text output only.
 
 ## Chat
 
@@ -96,7 +106,14 @@ Examples:
 ah chat <remote-agent-id> "What can you do?"
 ah chat <remote-agent-id>
 ah chat <local-agent-slug> "Continue this task"
+ah chat <remote-agent-id> --list
 ```
+
+Notes:
+
+1. Local refs stay in the daemon.
+2. Remote refs use the platform.
+3. `--list` is useful before resuming with `--session`.
 
 ## Subscription Commands
 
@@ -132,6 +149,12 @@ ah pipeline run \
   trend-agent "Analyze the market" \
   --then writer-agent "Write a brief using {prev}"
 ```
+
+Boundary notes:
+
+1. `fan-out` is a local runtime orchestration command.
+2. `pipeline run` is an orchestration helper, not a protocol-level A2A primitive.
+3. Remote pipeline steps still require auth.
 
 ## File Transfer Semantics
 

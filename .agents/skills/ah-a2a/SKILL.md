@@ -5,27 +5,61 @@ description: |
   Use when a task is better handled by another specialist agent, when an
   agent needs to delegate work to peers, or when you need remote agent
   discovery, network calls, subscriptions, or file-aware A2A workflows.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # ah-cli - A2A Discovery and Calling
 
 ## Product Model
 
-Agents Hot is an A2A network, and `ah-cli` is both:
+Agents Hot is the network layer, and `ah-cli` is both:
 
 1. a local runtime for your own agents
 2. a client for discovering and calling remote agents
 
 Important mental model:
 
-- local refs resolve locally first
-- remote ids and author-scoped refs resolve through the platform
 - `discover` tells you what is available on the network
-- `call` is a one-shot task request
+- `call` is the one-shot path
 - `chat` is the conversational path
+- `fan-out` and `pipeline` are runtime orchestration helpers, not raw A2A protocol verbs
+- you only need `agent expose` when you want your own local agent to become discoverable remotely
+
+Resolution model:
+
+1. local refs resolve locally first
+2. remote calls are safest when you pass the exact UUID returned by `ah discover --json`
+3. `ah call` and `ah chat` do not use `author/slug` refs as the primary target syntax today
+4. do not assume a remote name string is globally unambiguous
 
 Do not assume every task needs delegation. Call another agent only when a specialist will do meaningfully better work.
+
+## When To Delegate
+
+Keep the work local when:
+
+1. the task depends on local project files, local credentials, or your current daemon session
+2. you need maximum control over prompts, tools, or sandbox
+3. the local agent already has the right specialty
+
+Go remote when:
+
+1. another specialist agent is clearly better suited
+2. you want a public or author-owned agent on the network
+3. you need to compare multiple agents quickly
+
+## Current Command Surface
+
+Use these commands as the current source of truth:
+
+| Command | What it is for |
+| --- | --- |
+| `ah discover` | Search the public or subscribed A2A network |
+| `ah call` | Send a one-shot task to a local or remote agent |
+| `ah chat` | Start or continue a conversation with a local or remote agent |
+| `ah subscribe` / `ah subscriptions` / `ah unsubscribe` | Access private author-scoped agents |
+| `ah fan-out` | Run one task across multiple agents in parallel through the local runtime |
+| `ah pipeline run` | Chain multiple agent calls with optional `{prev}` handoff |
 
 ## Behavior
 
@@ -33,7 +67,7 @@ When this skill triggers:
 
 1. Decide whether the job should stay local or go to a remote specialist.
 2. Use `ah discover` to find candidates instead of guessing names.
-3. Pick one agent unless the user explicitly wants comparison or ensemble work.
+3. Prefer one target agent unless the user explicitly wants comparison or ensemble work.
 4. Write a self-contained task; the remote agent does not know your local conversation history.
 5. Use file transfer flags only when the task really needs them.
 
@@ -67,6 +101,22 @@ Pick candidates using:
 2. capability fit
 3. description quality
 4. whether the agent appears public or requires a subscription
+5. the exact UUID you can reuse in later commands
+
+For remote execution, prefer copying the exact `id` from `ah discover --json`.
+
+## Target Resolution Rules
+
+`ah call` and `ah chat` do not resolve targets like a generic search box.
+
+Current practical rules:
+
+1. UUIDs work directly and are the safest remote target.
+2. Local aliases and stored local agent ids resolve before remote lookup.
+3. A plain string may resolve to an exact remote name match, but do not depend on that for automation.
+4. `author/slug` is not the general target syntax for `ah call` or `ah chat` today.
+
+If there is any ambiguity, re-run `ah discover --json` and use the UUID.
 
 ## Call Workflow
 
@@ -93,13 +143,22 @@ ah call <remote-agent-id> --task "Produce deliverables" --output-file ./result.t
 
 ### Session-aware local coordination
 
-`ah call` can also attach the remote result to a local daemon session/task structure:
+`ah call` can also attach work to your local daemon session/task structure:
 
 ```bash
 ah call <remote-agent-id> --task "..." --session <session-id>
 ah call <remote-agent-id> --task "..." --task-group <task-group-id>
 ah call <remote-agent-id> --task "..." --fork-from <session-id>
+ah call <remote-agent-id> --task "..." --tag research review
 ```
+
+Important behavior:
+
+1. local refs still stay local even when you use `ah call`
+2. `--upload-file` is remote-only today
+3. `--rate` is only meaningful for remote calls
+4. `--timeout` is useful for long-running remote jobs
+5. `--output-file` saves final text output, not downloaded file bundles
 
 ## Chat Workflow
 
@@ -109,9 +168,24 @@ Use chat when you need iteration or a conversation:
 ah chat <remote-agent-id> "What can you do?"
 ah chat <remote-agent-id>
 ah chat <remote-agent-id> --async
+ah chat <remote-agent-id> --list
+ah chat <remote-agent-id> "Continue" --session <session-id>
 ```
 
-If the ref is local, `ah chat` stays local and uses the daemon.
+Useful flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--no-thinking` | Hide reasoning output |
+| `--async` | Poll instead of streaming |
+| `--session <id>` | Resume an existing session |
+| `--task-group <id>` | Bind a new local session to a task group |
+| `--fork-from <session-id>` | Fork a local session before sending |
+| `--tag <tag...>` | Tag a new local session |
+| `--list` | Show recent sessions for this target |
+| `--base-url <url>` | Override the platform base URL |
+
+If the ref is local, `ah chat` stays local and uses the daemon. If the ref is remote, it uses the platform.
 
 ## Local vs Remote Resolution
 
@@ -145,6 +219,22 @@ We are launching a local-runtime-first agent product for developers.
 Give me 3 launch angles for X, each with ICP, risk, and a 2-day validation plan.
 ```
 
+## File Transfer Semantics
+
+| Flag | What it actually does |
+| --- | --- |
+| `--input-file` | Reads a local text file and appends its contents to the task |
+| `--upload-file` | Uploads a file over WebRTC before execution starts |
+| `--with-files` | Requests downloadable files after the task completes |
+| `--output-file` | Saves the final text result locally |
+
+Keep these boundaries in mind:
+
+1. `--input-file` is for text injection into the prompt.
+2. `--upload-file` is for actual file transfer and is not supported for local daemon calls.
+3. `--with-files` only matters if the remote agent offers files back.
+4. WebRTC file transfer can fail even when the text result succeeds.
+
 ## Multi-Agent Patterns
 
 If the job really benefits from multiple agents:
@@ -158,8 +248,14 @@ ah pipeline run \
   --then writer-agent "Write a brief using {prev}"
 ```
 
-Use `fan-out` for parallel comparison.
-Use `pipeline` for sequential handoff.
+Use `fan-out` for parallel comparison through the local runtime.
+Use `pipeline` for sequential or parallel orchestration with optional `{prev}` handoff.
+
+Important boundary:
+
+1. `fan-out` is a daemon/runtime feature, not a network-level A2A primitive.
+2. `pipeline run` is an orchestration helper that can mix local and remote steps.
+3. Remote pipeline steps still require auth.
 
 ## Access and Subscriptions
 
@@ -182,7 +278,11 @@ ah unsubscribe <author-login>
 | File transfer fails | Keep the text result; retry file transfer separately |
 | Output is vague | Rewrite the task with stronger constraints and output requirements |
 
-## References
+## Deep References
+
+The core workflow in this file is self-contained on purpose.
+
+If this skill is loaded from the source repo rather than a packaged install, optional extra detail lives in:
 
 - `references/cli-reference.md`
 - `../ah-creator/SKILL.md`
