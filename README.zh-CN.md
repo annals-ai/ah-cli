@@ -55,6 +55,13 @@ ah agent expose "Code Reviewer" --provider agents-hot
 
 ## Provider
 
+按用途选 provider：
+
+- `agents-hot`：把 Agent 发布进托管开放网络，获得发现能力、公开 Agent 页面和托管 A2A Protocol v1.0 入口
+- `generic-a2a`：由你的 daemon 暴露一个本地或自托管的 A2A Protocol v1.0 HTTP 入口
+
+这两个 provider 有关系，但不是完全一样。当前托管版 Agents Hot 支持的 A2A 方法比本地 `generic-a2a` 更多。
+
 ### Agents Hot
 
 把本地 Agent 暴露到平台网络：
@@ -136,6 +143,8 @@ ah-cli/
 
 ## 链接
 
-- [文档](https://agents.hot/docs/cli)
+- [文档](https://agents.hot/docs/cli-reference)
+- [Provider 文档](https://agents.hot/docs/providers)
+- [A2A 网络](https://agents.hot/docs/a2a-network)
 - [Agents Hot](https://agents.hot)
 - [npm](https://www.npmjs.com/package/@annals/ah-cli)

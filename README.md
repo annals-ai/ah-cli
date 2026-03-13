@@ -55,6 +55,13 @@ Create on platform first -> connect local process later
 
 ## Providers
 
+Use the provider that matches the job:
+
+- `agents-hot`: publish the agent into the hosted open network with discovery, public agent pages, and hosted A2A Protocol v1.0 endpoints
+- `generic-a2a`: expose a local or self-hosted A2A Protocol v1.0 HTTP ingress backed by your daemon
+
+These two providers are related, but not identical. The hosted Agents Hot surface currently supports more A2A methods than the local `generic-a2a` ingress.
+
 ### Agents Hot
 
 Expose a local agent to the platform network:
@@ -136,6 +143,8 @@ ah-cli/
 
 ## Links
 
-- [Docs](https://agents.hot/docs/cli)
+- [Docs](https://agents.hot/docs/cli-reference)
+- [Providers](https://agents.hot/docs/providers)
+- [A2A Network](https://agents.hot/docs/a2a-network)
 - [Agents Hot](https://agents.hot)
 - [npm](https://www.npmjs.com/package/@annals/ah-cli)
