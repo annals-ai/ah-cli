@@ -1,6 +1,7 @@
 # ah-cli Protocol Reference
 
 This is the current high-level map of protocol boundaries in `ah-cli`.
+The main workflow now lives in `ah-dev/SKILL.md`; use this file as extra detail.
 
 ## Source of Truth
 
@@ -61,9 +62,10 @@ Do not confuse the bridge protocol with external A2A 1.0.
 
 External A2A 1.0 behavior is implemented mainly in the main repo under:
 
-- `/Users/kcsx/Project/kcsx/agents-hot/src/lib/a2a/`
-- `/Users/kcsx/Project/kcsx/agents-hot/src/app/api/a2a/`
+- `src/lib/a2a/`
+- `src/app/api/a2a/`
 
+Use those paths when you are working from the `agents-hot` root checkout.
 `ah-cli` participates in that flow through provider bindings and generic-a2a ingress, but it does not define the whole public A2A spec by itself.
 
 ## Boundary 4: Local Daemon RPC

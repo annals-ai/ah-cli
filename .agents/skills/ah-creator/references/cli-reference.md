@@ -1,6 +1,7 @@
 # ah-cli Command Reference
 
 Current command families for `ah` as shipped from `@annals/ah-cli`.
+The main workflow now lives in `ah-creator/SKILL.md`; use this file as extra detail.
 
 When this file and live help differ, trust:
 

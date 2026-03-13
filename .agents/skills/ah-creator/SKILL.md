@@ -5,7 +5,7 @@ description: |
   Use when someone needs to set up a new agent, inspect daemon-owned agents,
   expose an agent through Agents Hot or generic-a2a, package or install skills,
   attach MCP servers, or troubleshoot local runtime setup.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # ah-cli - Create, Manage, and Expose Agents
@@ -79,6 +79,12 @@ Workspace guidance:
 - Reusable local skills should live in `.agents/skills/`.
 - `ah skills install` also mirrors installed skills into `.claude/skills/` when needed.
 
+Install reality:
+
+1. the primary local install target is `.agents/skills/`
+2. client-specific mirrors such as `.claude/skills/` or `.codex/skills/` may exist, but do not assume every installer populates every mirror automatically
+3. if install location matters, inspect the actual installed directories instead of guessing
+
 ## Workflow Routing
 
 | Intent | Primary commands |
@@ -93,6 +99,20 @@ Workspace guidance:
 | Remove or disable exposure | `ah agent unexpose`, `ah agent remove` |
 | Package or publish skills | `ah skills ...` |
 | Attach tool servers | `ah mcp add`, `ah mcp import`, `ah mcp list` |
+
+## Current Command Surface
+
+Use these commands as the current source of truth:
+
+| Area | Primary commands |
+| --- | --- |
+| Create and register | `ah agent add`, `ah agent quick` |
+| Inspect and test | `ah agent list`, `ah agent show`, `ah status`, `ah chat`, `ah call`, `ah ui open` |
+| Update and duplicate | `ah agent update`, `ah agent clone`, `ah agent ping` |
+| Exposure | `ah agent expose`, `ah agent unexpose` |
+| Sessions and tasks | `ah session ...`, `ah task ...` |
+| Skills | `ah skills init`, `ah skills pack`, `ah skills publish`, `ah skills install`, `ah skills installed` |
+| MCP | `ah mcp import`, `ah mcp add`, `ah mcp list`, `ah mcp remove` |
 
 ## Create a Local Agent
 
@@ -246,6 +266,14 @@ ah mcp list
 ah mcp remove my-server
 ```
 
+## Skill Install Reality
+
+When someone asks where a skill ended up, use this order:
+
+1. check `.agents/skills/` first
+2. then check client mirrors such as `.claude/skills/` or `.codex/skills/`
+3. if the install came from a packaged source, do not assume every optional reference file was installed unless you verify
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -258,7 +286,11 @@ ah mcp remove my-server
 | Skill install path is confusing | Check `.agents/skills/` first, then `.claude/skills/` mirrors |
 | generic-a2a exposure fails | Confirm `--config-json` is valid JSON and includes required auth when private |
 
-## References
+## Deep References
+
+This file is intentionally usable on its own.
+
+If the source tree is available, extra detail lives in:
 
 - `references/cli-reference.md`
 - `references/skill-publishing.md`

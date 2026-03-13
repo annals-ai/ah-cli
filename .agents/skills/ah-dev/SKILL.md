@@ -4,18 +4,18 @@ description: |
   Development guide for the ah-cli sub-repo. Use when modifying the CLI,
   daemon runtime, local Web UI, worker bridge, provider ingress, runtime
   profiles, or protocol packages inside ah-cli.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # ah-cli Development Guide
 
 ## Read This First
 
-Start with:
+If you are inside an `ah-cli` checkout, start with:
 
-1. `ah-cli/CLAUDE.md`
+1. `CLAUDE.md`
 2. the relevant package directory
-3. the small reference files in this skill
+3. the small reference files in this skill if they are available
 
 Do not design against old `connect` or `connect-ticket` assumptions.
 
@@ -82,29 +82,43 @@ If you widen runtime support, audit the protocol too. Some bridge-level types st
 
 If the change affects actual A2A 1.0 semantics, also inspect the main repo:
 
-- `/Users/kcsx/Project/kcsx/agents-hot/src/lib/a2a/`
-- `/Users/kcsx/Project/kcsx/agents-hot/src/app/api/a2a/`
+- `src/lib/a2a/`
+- `src/app/api/a2a/`
 
+Use those paths when you are working from the `agents-hot` root checkout.
 `ah-cli` is only one part of the end-to-end A2A system.
 
 ## Development Workflow
 
+From the `ah-cli` root:
+
 ```bash
-cd /Users/kcsx/Project/kcsx/agents-hot/ah-cli
 pnpm install
 pnpm build
 pnpm exec vitest run
 ```
 
-Useful targeted commands:
+From the parent `agents-hot` repo:
 
 ```bash
-pnpm -C /Users/kcsx/Project/kcsx/agents-hot/ah-cli build
-pnpm -C /Users/kcsx/Project/kcsx/agents-hot/ah-cli exec vitest run
-pnpm -C /Users/kcsx/Project/kcsx/agents-hot/ah-cli lint
+pnpm -C ah-cli build
+pnpm -C ah-cli exec vitest run
+pnpm -C ah-cli lint
 ```
 
 Treat lint debt carefully. Distinguish pre-existing failures from regressions introduced by your change.
+
+## Current Command Surface
+
+When the skill is being used as a development manual, these are the main live areas to keep in mind:
+
+| Area | Main commands or code surface |
+| --- | --- |
+| Local runtime | `ah daemon`, `ah agent`, `ah chat`, `ah call`, `ah session`, `ah task` |
+| Network and exposure | `ah discover`, `ah subscribe`, `ah agent expose`, provider bindings |
+| Skill lifecycle | `ah skills init`, `ah skills pack`, `ah skills publish`, `ah skills install` |
+| Tool wiring | `ah mcp import`, `ah mcp add`, `ah mcp list`, `ah mcp remove` |
+| Diagnostics | `ah status`, `ah doctor`, `ah config`, `ah daemon logs` |
 
 ## Integration Checks
 
@@ -112,9 +126,9 @@ If you touched CLI behavior, verify with real commands:
 
 ```bash
 node packages/cli/dist/index.js help --json
-ah daemon start
-ah agent list
-ah chat <local-agent> "hello"
+node packages/cli/dist/index.js daemon start
+node packages/cli/dist/index.js agent list
+node packages/cli/dist/index.js chat <local-agent> "hello"
 ```
 
 If you touched provider or bridge behavior, also verify:
@@ -132,15 +146,13 @@ If you touched provider or bridge behavior, also verify:
 
 ### Mac Mini runtime
 
-Remote runtime path currently lives under:
+If the user asks to update the remote runtime, use the `publish` and `macmini` workflows from the main repo context instead of hardcoding a machine-specific path in this skill.
 
-```text
-/Users/yan/agents-hot/ah-cli
-```
+## Deep References
 
-If the user asks to update the remote runtime, use the `macmini` skill from the main repo context.
+This file is intentionally usable on its own.
 
-## References
+If the source tree is available, extra detail lives in:
 
 - `references/architecture.md`
 - `references/protocol-reference.md`
