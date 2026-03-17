@@ -17,7 +17,7 @@ export function registerPsShortcutCommand(program: Command): void {
     .action(async (opts: { json?: boolean; all?: boolean }) => {
       await ensureDaemonRunning();
 
-      // Get sessions
+      // Get sessions - use 'all' and filter client-side since daemon doesn't support comma-separated status
       const sessionResult = await requestDaemon<{
         sessions: Array<{
           id: string;
@@ -28,7 +28,7 @@ export function registerPsShortcutCommand(program: Command): void {
           agentName?: string;
         }>;
       }>('session.list', {
-        status: opts.all ? 'all' : 'active,running,idle,paused',
+        status: 'all',
       });
 
       // Get agents
