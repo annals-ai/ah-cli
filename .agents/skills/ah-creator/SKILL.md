@@ -1,31 +1,27 @@
 ---
 name: ah-creator
 description: |
-  Create, manage, debug, and expose local agents with ah-cli.
-  Use when someone needs to set up a new agent, inspect daemon-owned agents,
-  expose an agent through Agents Hot or generic-a2a, package or install skills,
-  attach MCP servers, or troubleshoot local runtime setup.
-version: 0.2.0
+  Create, manage, and expose local agents with ah-cli.
+  Use when setting up new agents, inspecting daemon state, exposing agents
+  to the A2A network, managing skills/MCP, or troubleshooting local runtime.
+version: 0.3.0
 ---
 
 # ah-cli - Create, Manage, and Expose Agents
 
 ## Product Model
 
-`ah-cli` is a daemon-first local runtime:
+ah-cli is a local daemon that manages your AI agents:
 
-1. One machine runs one daemon.
-2. The daemon owns many local agents, sessions, task groups, and provider bindings.
-3. Local `ah chat` / `ah call` hit the daemon first.
-4. Exposure is optional and happens later through providers:
-   - `agents-hot`
-   - `generic-a2a`
+1. One daemon per machine. It owns agents, sessions, task groups, and provider bindings.
+2. `ah chat` / `ah call` hit the local daemon first.
+3. Exposure to the open A2A network is optional:
+   - `agents-hot` — hosted A2A endpoints with discovery and access control
+   - `generic-a2a` — standard A2A HTTP endpoint from your daemon
 
-The main path is:
+The path: `daemon start → agent add → local test → (optional) expose`
 
-`install/login -> daemon start -> agent add/quick -> local smoke test -> expose -> remote discover/call`
-
-Do not fall back to old `connect`, `connect-ticket`, `agent-network`, or "web-first registration" guidance.
+Do not use old `connect`, `connect-ticket`, or web-first registration flows.
 
 ## Behavior
 

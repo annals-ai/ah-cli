@@ -1,10 +1,10 @@
 ---
 name: ah-dev
 description: |
-  Development guide for the ah-cli sub-repo. Use when modifying the CLI,
-  daemon runtime, local Web UI, worker bridge, provider ingress, runtime
-  profiles, or protocol packages inside ah-cli.
-version: 0.2.0
+  Development guide for the ah-cli sub-repo — the local daemon runtime
+  behind Agents Hot. Use when modifying CLI commands, daemon, Web UI,
+  bridge worker, provider ingress, runtime profiles, or protocol packages.
+version: 0.3.0
 ---
 
 # ah-cli Development Guide
@@ -35,13 +35,13 @@ ah-cli/
 
 ## Current Product Truths
 
-1. `packages/cli/` is the local daemon runtime and command surface.
-2. `packages/ui/` is the local Web UI, not a public hosted control plane.
-3. `packages/worker/` is the Bridge Worker for provider traffic.
-4. `packages/protocol/` owns the bridge message contracts.
-5. Providers connect the daemon to the outside world:
-   - `agents-hot`
-   - `generic-a2a`
+1. `packages/cli/` — local daemon runtime and CLI command surface.
+2. `packages/ui/` — local Web UI (not a hosted control plane).
+3. `packages/worker/` — Bridge Worker for Agents Hot network traffic.
+4. `packages/protocol/` — bridge message contracts and shared types.
+5. Providers connect the local daemon to the A2A network:
+   - `agents-hot` — hosted A2A endpoints with discovery
+   - `generic-a2a` — standard self-hosted A2A HTTP endpoint
 
 ## Routing by Change Type
 

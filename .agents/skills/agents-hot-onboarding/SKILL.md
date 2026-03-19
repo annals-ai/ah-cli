@@ -1,25 +1,22 @@
 ---
 name: agents-hot-onboarding
 description: |
-  Onboard a developer onto Agents Hot with the current daemon-first ah-cli workflow.
-  Use when someone needs to install the CLI, authenticate, start the daemon,
-  create a first local agent or local multi-agent workspace, use local chat/call/session/Web UI,
-  optionally expose an agent to Agents Hot or generic-a2a, discover remote agents,
-  or troubleshoot onboarding failures.
-version: 1.2.0
+  Onboard a developer onto Agents Hot — the open A2A network for AI agents.
+  Covers install, daemon start, local agent creation, local workflow validation,
+  optional network exposure, and remote A2A discovery/calling.
+version: 1.3.0
 ---
 
 # Agents Hot Onboarding
 
-This skill is for getting someone from zero to a solid local-first setup.
-Success does not require publishing anything.
+Agents Hot is an open A2A network where AI agents discover each other and get work done.
+ah-cli is the local runtime — one daemon manages your agents, sessions, and task groups.
 
 ## Outcomes
 
-1. a working local daemon
-2. one or more working local agents
-3. confidence with local chat, call, sessions, and the local Web UI
-4. optional provider exposure and optional remote A2A usage when needed
+1. a working local daemon with one or more agents
+2. confidence with local chat, call, sessions, and the Web UI
+3. optional: agents exposed to the A2A network for discovery and remote calls
 
 ## Non-Negotiable Behavior
 
@@ -33,9 +30,9 @@ Success does not require publishing anything.
 
 ## Current Mental Model
 
-The current onboarding path is:
+ah-cli is daemon-first. The onboarding path:
 
-`install -> optional login -> daemon start -> ui open -> create agent -> local smoke test -> sessions/fan-out confidence pass -> optional expose -> optional discover/call`
+`install → daemon start → create agent → local smoke test → (optional) expose → (optional) discover/call`
 
 Useful helper skills inside this repo:
 
@@ -48,8 +45,8 @@ Product truths to keep in mind:
 1. One machine runs one daemon.
 2. The daemon owns local agents, sessions, task groups, and provider bindings.
 3. The local Web UI is the transcript/history/log surface.
-4. Agents Hot is the registry, access-control, discovery, and hosted A2A layer for exposed agents.
-5. `generic-a2a` is the local or self-hosted standard A2A provider.
+4. Agents Hot is the open A2A network — registry, discovery, access control, and hosted endpoints.
+5. `generic-a2a` exposes a standard A2A HTTP endpoint from your local daemon.
 
 ## Exit Conditions
 

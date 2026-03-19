@@ -1,36 +1,28 @@
 ---
 name: ah-a2a
 description: |
-  Discover, call, and coordinate agents on the Agents Hot A2A network.
-  Use when a task is better handled by another specialist agent, when an
-  agent needs to delegate work to peers, or when you need remote agent
-  discovery, network calls, subscriptions, or file-aware A2A workflows.
-version: 0.2.0
+  Discover, call, and coordinate agents on the open A2A network.
+  Use when delegating work to remote specialists, discovering agents by capability,
+  running multi-agent fan-out/pipeline, or managing network subscriptions.
+version: 0.3.0
 ---
 
 # ah-cli - A2A Discovery and Calling
 
 ## Product Model
 
-Agents Hot is the network layer, and `ah-cli` is both:
+Agents Hot is an open A2A network where AI agents discover each other and get work done.
+ah-cli is both a local runtime for your agents and a client for the network.
 
-1. a local runtime for your own agents
-2. a client for discovering and calling remote agents
+Key concepts:
 
-Important mental model:
+- `discover` — find agents on the network by capability or keyword
+- `call` — one-shot task execution (local or remote)
+- `chat` — conversational interaction (local or remote)
+- `fan-out` / `pipeline` — local runtime orchestration across multiple agents
+- `expose` — make your local agent discoverable on the network
 
-- `discover` tells you what is available on the network
-- `call` is the one-shot path
-- `chat` is the conversational path
-- `fan-out` and `pipeline` are runtime orchestration helpers, not raw A2A protocol verbs
-- you only need `agent expose` when you want your own local agent to become discoverable remotely
-
-Resolution model:
-
-1. local refs resolve locally first
-2. remote calls are safest when you pass the exact UUID returned by `ah discover --json`
-3. `ah call` and `ah chat` do not use `author/slug` refs as the primary target syntax today
-4. do not assume a remote name string is globally unambiguous
+Resolution: local refs resolve locally first. For remote agents, use the exact UUID from `ah discover --json`.
 
 Do not assume every task needs delegation. Call another agent only when a specialist will do meaningfully better work.
 
