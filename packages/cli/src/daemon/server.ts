@@ -657,7 +657,9 @@ export class AgentNetworkDaemonServer {
 
       case 'session.stop': {
         const id = expectString(request.params?.id, 'id');
-        return { session: this.runtime.stopSession(id) };
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        return { session: this.runtime.stopSession(resolvedId) };
       }
 
       case 'session.start': {
@@ -763,8 +765,10 @@ export class AgentNetworkDaemonServer {
 
       case 'session.archive': {
         const id = expectString(request.params?.id, 'id');
-        const session = this.store.archiveSession(id);
-        await this.runtime.syncSessionToPlatform(id);
+        const resolvedId = this.store.resolveSessionRef(id);
+        if (!resolvedId) throw new Error(`Session not found: ${id}`);
+        const session = this.store.archiveSession(resolvedId);
+        await this.runtime.syncSessionToPlatform(resolvedId);
         return { session };
       }
 
