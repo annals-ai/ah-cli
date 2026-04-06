@@ -37,6 +37,15 @@ export interface DaemonAgent {
   updatedAt: string;
 }
 
+export interface AclEntry {
+  id: string;
+  agentId: string;
+  principal: string;
+  permission: string;
+  grantedBy: string | null;
+  createdAt: string;
+}
+
 export interface ProviderBinding {
   id: string;
   agentId: string;

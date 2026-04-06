@@ -532,6 +532,33 @@ export class AgentNetworkDaemonServer {
         return unexposeManagedAgent({ store: this.store, runtime: this.runtime }, ref, providerName);
       }
 
+      case 'agent.grant': {
+        const ref = expectString(request.params?.ref, 'ref');
+        const principal = expectString(request.params?.principal, 'principal');
+        const permission = typeof request.params?.permission === 'string' ? request.params.permission : 'call';
+        const agent = this.store.resolveAgentRef(ref);
+        if (!agent) throw new Error(`Local agent not found: ${ref}`);
+        const entry = this.store.grantAccess({ agentId: agent.id, principal, permission });
+        return { agent, entry };
+      }
+
+      case 'agent.revoke': {
+        const ref = expectString(request.params?.ref, 'ref');
+        const principal = expectString(request.params?.principal, 'principal');
+        const permission = typeof request.params?.permission === 'string' ? request.params.permission : undefined;
+        const agent = this.store.resolveAgentRef(ref);
+        if (!agent) throw new Error(`Local agent not found: ${ref}`);
+        const revoked = this.store.revokeAccess(agent.id, principal, permission);
+        return { agent, revoked };
+      }
+
+      case 'agent.acl': {
+        const ref = expectString(request.params?.ref, 'ref');
+        const agent = this.store.resolveAgentRef(ref);
+        if (!agent) throw new Error(`Local agent not found: ${ref}`);
+        return { agent, entries: this.store.listAcl(agent.id) };
+      }
+
       case 'provider.status': {
         const bindings = this.store.listProviderBindings();
         const agents = bindings.map((b) => {

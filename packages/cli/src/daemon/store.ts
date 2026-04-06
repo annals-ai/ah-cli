@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { DEFAULT_RUNTIME_CONFIG } from '../utils/config.js';
 import { getDaemonDbPath } from './paths.js';
 import type {
+  AclEntry,
   AppendMessageInput,
   CreateAgentInput,
   CreateSessionInput,
@@ -194,6 +195,17 @@ export class DaemonStore {
         metadata_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL,
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_acl (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        principal TEXT NOT NULL,
+        permission TEXT NOT NULL DEFAULT 'call',
+        granted_by TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE(agent_id, principal, permission),
+        FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
     `);
 
@@ -868,6 +880,59 @@ export class DaemonStore {
       WHERE agent_id = ? AND provider = ?
     `).run(agentId, provider);
     return Number(result.changes ?? 0) > 0;
+  }
+
+  // ─── ACL ──────────────────────────────────────────────────────
+
+  private mapAclEntry(row: Record<string, unknown>): AclEntry {
+    return {
+      id: row.id as string,
+      agentId: row.agent_id as string,
+      principal: row.principal as string,
+      permission: row.permission as string,
+      grantedBy: (row.granted_by as string) ?? null,
+      createdAt: row.created_at as string,
+    };
+  }
+
+  grantAccess(params: {
+    agentId: string;
+    principal: string;
+    permission?: string;
+    grantedBy?: string;
+  }): AclEntry {
+    const id = randomUUID();
+    const now = nowIso();
+    const permission = params.permission ?? 'call';
+    this.db.prepare(`
+      INSERT OR IGNORE INTO agent_acl (id, agent_id, principal, permission, granted_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, params.agentId, params.principal, permission, params.grantedBy ?? null, now);
+    const row = this.db.prepare(`
+      SELECT * FROM agent_acl WHERE agent_id = ? AND principal = ? AND permission = ?
+    `).get(params.agentId, params.principal, permission) as Record<string, unknown>;
+    return this.mapAclEntry(row);
+  }
+
+  revokeAccess(agentId: string, principal: string, permission?: string): boolean {
+    const result = permission
+      ? this.db.prepare(`DELETE FROM agent_acl WHERE agent_id = ? AND principal = ? AND permission = ?`).run(agentId, principal, permission)
+      : this.db.prepare(`DELETE FROM agent_acl WHERE agent_id = ? AND principal = ?`).run(agentId, principal);
+    return Number(result.changes ?? 0) > 0;
+  }
+
+  listAcl(agentId: string): AclEntry[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM agent_acl WHERE agent_id = ? ORDER BY created_at ASC
+    `).all(agentId) as Record<string, unknown>[];
+    return rows.map((row) => this.mapAclEntry(row));
+  }
+
+  checkAccess(agentId: string, principal: string, permission = 'call'): boolean {
+    const row = this.db.prepare(`
+      SELECT 1 FROM agent_acl WHERE agent_id = ? AND (principal = ? OR principal = '*') AND permission = ?
+    `).get(agentId, principal, permission);
+    return !!row;
   }
 
   getRuntimeLimit(scopeType = 'daemon', scopeId = 'global'): RuntimeLimitRecord {

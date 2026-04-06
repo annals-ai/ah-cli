@@ -143,6 +143,43 @@ describe('DaemonStore', () => {
 
     expect(store.getDaemonSetting('ui.first_open_completed')).toEqual({ value: true });
   });
+
+  it('manages agent ACL entries', () => {
+    const agent = store.createAgent({
+      name: 'ACL Test Agent',
+      projectPath: '/tmp/acl-test',
+      capabilities: [],
+    });
+
+    // Grant access
+    const entry = store.grantAccess({ agentId: agent.id, principal: 'user@example.com', permission: 'call' });
+    expect(entry.principal).toBe('user@example.com');
+    expect(entry.permission).toBe('call');
+
+    // Grant wildcard
+    store.grantAccess({ agentId: agent.id, principal: '*', permission: 'call' });
+
+    // List ACL
+    const entries = store.listAcl(agent.id);
+    expect(entries.length).toBe(2);
+
+    // Check access
+    expect(store.checkAccess(agent.id, 'user@example.com', 'call')).toBe(true);
+    expect(store.checkAccess(agent.id, 'unknown@example.com', 'call')).toBe(true); // wildcard
+    expect(store.checkAccess(agent.id, 'user@example.com', 'admin')).toBe(false);
+
+    // Revoke specific
+    const revoked = store.revokeAccess(agent.id, 'user@example.com', 'call');
+    expect(revoked).toBe(true);
+    expect(store.listAcl(agent.id).length).toBe(1);
+
+    // Revoke wildcard
+    store.revokeAccess(agent.id, '*');
+    expect(store.listAcl(agent.id).length).toBe(0);
+
+    // Check no access
+    expect(store.checkAccess(agent.id, 'user@example.com', 'call')).toBe(false);
+  });
 });
 
 describe('buildPromptFromHistory', () => {

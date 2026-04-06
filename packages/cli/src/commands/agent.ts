@@ -543,6 +543,82 @@ export function registerAgentCommand(program: Command): void {
       console.log();
     });
 
+  agent
+    .command('grant <ref>')
+    .description('Grant access to an agent for a principal (email, user ID, or * for public)')
+    .requiredOption('--to <principal>', 'Principal to grant access to (email, user ID, or *)')
+    .option('--permission <perm>', 'Permission to grant: call | chat | admin', 'call')
+    .action(async (ref: string, opts: { to: string; permission: string }) => {
+      await ensureDaemonRunning();
+      const result = await requestDaemon<{
+        agent: { slug: string; name: string };
+        entry: { principal: string; permission: string };
+      }>('agent.grant', {
+        ref,
+        principal: opts.to,
+        permission: opts.permission,
+      });
+      log.success(`Granted ${BOLD}${result.entry.permission}${RESET} access to ${BOLD}${result.entry.principal}${RESET} on ${result.agent.slug}`);
+    });
+
+  agent
+    .command('revoke <ref>')
+    .description('Revoke access from a principal')
+    .requiredOption('--from <principal>', 'Principal to revoke access from')
+    .option('--permission <perm>', 'Specific permission to revoke (omit to revoke all)')
+    .action(async (ref: string, opts: { from: string; permission?: string }) => {
+      await ensureDaemonRunning();
+      const result = await requestDaemon<{
+        agent: { slug: string; name: string };
+        revoked: boolean;
+      }>('agent.revoke', {
+        ref,
+        principal: opts.from,
+        permission: opts.permission,
+      });
+      if (result.revoked) {
+        log.success(`Revoked access for ${BOLD}${opts.from}${RESET} on ${result.agent.slug}`);
+      } else {
+        log.info(`No matching ACL entry found for ${opts.from} on ${result.agent.slug}`);
+      }
+    });
+
+  agent
+    .command('acl <ref>')
+    .description('List access control entries for an agent')
+    .option('--json', 'Output JSON')
+    .action(async (ref: string, opts: { json?: boolean }) => {
+      await ensureDaemonRunning();
+      const result = await requestDaemon<{
+        agent: { slug: string; name: string };
+        entries: Array<{ principal: string; permission: string; grantedBy: string | null; createdAt: string }>;
+      }>('agent.acl', { ref });
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      console.log(`\n${BOLD}ACL for ${result.agent.name}${RESET} (${result.agent.slug})\n`);
+
+      if (result.entries.length === 0) {
+        console.log(`${GRAY}No ACL entries. Agent uses default visibility rules.${RESET}\n`);
+        return;
+      }
+
+      const columns: Column[] = [
+        { key: 'principal', label: 'PRINCIPAL', width: 30 },
+        { key: 'permission', label: 'PERMISSION', width: 12 },
+        { key: 'createdAt', label: 'GRANTED', width: 22 },
+      ];
+      const rows = result.entries.map((e) => ({
+        principal: e.principal === '*' ? `${YELLOW}* (public)${RESET}` : e.principal,
+        permission: e.permission,
+        createdAt: new Date(e.createdAt).toLocaleString(),
+      }));
+      console.log(renderTable(columns, rows));
+    });
+
   // Ping agents to check health
   agent
     .command('ping [refs...]', { isDefault: false })
