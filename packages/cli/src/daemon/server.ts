@@ -484,6 +484,7 @@ export class AgentNetworkDaemonServer {
           visibility: typeof request.params?.visibility === 'string'
             ? request.params.visibility as 'public' | 'private' | 'unlisted'
             : 'private',
+          remoteHost: typeof request.params?.remoteHost === 'string' ? request.params.remoteHost : null,
         });
         return { agent };
       }
@@ -503,6 +504,9 @@ export class AgentNetworkDaemonServer {
             : undefined,
           visibility: typeof request.params?.visibility === 'string'
             ? request.params.visibility as 'public' | 'private' | 'unlisted'
+            : undefined,
+          remoteHost: request.params?.remoteHost === null ? null
+            : typeof request.params?.remoteHost === 'string' ? request.params.remoteHost
             : undefined,
         });
         return { agent };

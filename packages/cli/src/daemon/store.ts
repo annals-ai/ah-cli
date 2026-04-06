@@ -210,6 +210,7 @@ export class DaemonStore {
     `);
 
     try { this.db.exec(`ALTER TABLE agents ADD COLUMN persona TEXT`); } catch {}
+    try { this.db.exec(`ALTER TABLE agents ADD COLUMN remote_host TEXT`); } catch {}
   }
 
   private ensureDefaultRuntimeLimit(): void {
@@ -249,6 +250,7 @@ export class DaemonStore {
       description: row.description ? String(row.description) : null,
       capabilities: parseJson<string[]>(row.capabilities as string, []),
       visibility: String(row.visibility) as DaemonAgent['visibility'],
+      remoteHost: row.remote_host ? String(row.remote_host) : null,
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     };
@@ -380,8 +382,8 @@ export class DaemonStore {
 
     this.db.prepare(`
       INSERT INTO agents (
-        id, slug, name, runtime_type, project_path, sandbox, persona, description, capabilities, visibility, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, slug, name, runtime_type, project_path, sandbox, persona, description, capabilities, visibility, remote_host, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       slug,
@@ -393,6 +395,7 @@ export class DaemonStore {
       input.description ?? null,
       JSON.stringify(input.capabilities ?? []),
       input.visibility ?? 'private',
+      input.remoteHost ?? null,
       now,
       now,
     );
@@ -419,6 +422,7 @@ export class DaemonStore {
     if (input.description !== undefined) update.description = input.description;
     if (input.capabilities !== undefined) update.capabilities = JSON.stringify(input.capabilities);
     if (input.visibility !== undefined) update.visibility = input.visibility;
+    if (input.remoteHost !== undefined) update.remote_host = input.remoteHost;
 
     const built = buildSetClause(update);
     this.db.prepare(`UPDATE agents SET ${built.clause} WHERE id = ?`).run(...built.params, agentId);

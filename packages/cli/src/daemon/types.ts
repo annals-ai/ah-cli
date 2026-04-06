@@ -33,6 +33,8 @@ export interface DaemonAgent {
   description: string | null;
   capabilities: string[];
   visibility: AgentVisibility;
+  /** SSH host for remote CC execution (e.g. "user@host" or "mac-mini"). null = local. */
+  remoteHost: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,6 +118,7 @@ export interface CreateAgentInput {
   description?: string | null;
   capabilities?: string[];
   visibility?: AgentVisibility;
+  remoteHost?: string | null;
 }
 
 export interface UpdateAgentInput {
@@ -128,6 +131,7 @@ export interface UpdateAgentInput {
   description?: string | null;
   capabilities?: string[];
   visibility?: AgentVisibility;
+  remoteHost?: string | null;
 }
 
 export interface CreateSessionInput {

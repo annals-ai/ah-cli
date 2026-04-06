@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { CliAdapter } from '../adapters/cli-session.js';
 import { CliAdapter as RuntimeCliAdapter } from '../adapters/cli-session.js';
+import { RemoteCliAdapter } from '../adapters/remote-session.js';
+import type { AgentAdapter } from '../adapters/base.js';
 import type { SessionDonePayload, SessionHandle, ToolEvent } from '../adapters/base.js';
 import { getProfile } from '../adapters/profiles.js';
 import { createClient, PlatformApiError } from '../platform/api-client.js';
@@ -357,14 +359,22 @@ export class DaemonRuntime {
     return { session, agent };
   }
 
-  private getAdapter(agent: DaemonAgent): CliAdapter {
+  private getAdapter(agent: DaemonAgent): AgentAdapter {
     let adapter = this.adapters.get(agent.id);
     if (!adapter) {
-      adapter = new RuntimeCliAdapter(getProfile(agent.runtimeType), {
-        project: agent.projectPath,
-        sandboxEnabled: agent.sandbox,
-        agentId: agent.id,
-      });
+      const profile = getProfile(agent.runtimeType);
+      if (agent.remoteHost) {
+        adapter = new RemoteCliAdapter(profile, agent.remoteHost, {
+          project: agent.projectPath,
+          agentId: agent.id,
+        }) as unknown as CliAdapter;
+      } else {
+        adapter = new RuntimeCliAdapter(profile, {
+          project: agent.projectPath,
+          sandboxEnabled: agent.sandbox,
+          agentId: agent.id,
+        });
+      }
       this.adapters.set(agent.id, adapter);
     }
     return adapter;

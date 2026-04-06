@@ -34,6 +34,7 @@ export function registerAgentCommand(program: Command): void {
     .option('--description <text>', 'Description')
     .option('--visibility <visibility>', 'public | private | unlisted', 'private')
     .option('--capabilities <caps>', 'Comma-separated capabilities')
+    .option('--remote <host>', 'SSH host for remote CC execution (e.g. user@host)')
     .action(async (opts: {
       name: string;
       project: string;
@@ -44,6 +45,7 @@ export function registerAgentCommand(program: Command): void {
       description?: string;
       visibility: 'public' | 'private' | 'unlisted';
       capabilities?: string;
+      remote?: string;
     }) => {
       await ensureDaemonRunning();
       const result = await requestDaemon<{ agent: { id: string; slug: string; name: string } }>('agent.add', {
@@ -56,8 +58,9 @@ export function registerAgentCommand(program: Command): void {
         description: opts.description,
         visibility: opts.visibility,
         capabilities: parseCapabilities(opts.capabilities),
+        remoteHost: opts.remote ?? null,
       });
-      log.success(`Local agent added: ${BOLD}${result.agent.name}${RESET} (${result.agent.slug})`);
+      log.success(`${opts.remote ? 'Remote' : 'Local'} agent added: ${BOLD}${result.agent.name}${RESET} (${result.agent.slug})`);
     });
 
   agent
@@ -291,6 +294,8 @@ export function registerAgentCommand(program: Command): void {
     .option('--description <text>', 'Description')
     .option('--visibility <visibility>', 'public | private | unlisted')
     .option('--capabilities <caps>', 'Comma-separated capabilities')
+    .option('--remote <host>', 'SSH host for remote CC execution (empty string to clear)')
+    .option('--no-remote', 'Clear remote host (make agent local)')
     .action(async (ref: string, opts: {
       name?: string;
       slug?: string;
@@ -301,8 +306,12 @@ export function registerAgentCommand(program: Command): void {
       description?: string;
       visibility?: 'public' | 'private' | 'unlisted';
       capabilities?: string;
+      remote?: string | boolean;
     }) => {
       await ensureDaemonRunning();
+      let remoteHost: string | null | undefined;
+      if (typeof opts.remote === 'string') remoteHost = opts.remote;
+      else if (opts.remote === false) remoteHost = null;
       const result = await requestDaemon<{ agent: { slug: string; name: string } }>('agent.update', {
         ref,
         name: opts.name,
@@ -314,6 +323,7 @@ export function registerAgentCommand(program: Command): void {
         description: opts.description,
         visibility: opts.visibility,
         capabilities: parseCapabilities(opts.capabilities),
+        remoteHost,
       });
       log.success(`Local agent updated: ${BOLD}${result.agent.name}${RESET} (${result.agent.slug})`);
     });
