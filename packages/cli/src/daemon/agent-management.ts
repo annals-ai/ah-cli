@@ -39,6 +39,7 @@ export async function updateManagedAgent(
 ): Promise<DaemonAgent> {
   const current = resolveAgentOrThrow(context.store, ref);
   const agent = context.store.updateAgent(current.id, input);
+  context.runtime.invalidateAdapter(agent.id);
   await restartActiveBindings(context, agent);
   return agent;
 }

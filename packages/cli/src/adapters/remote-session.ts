@@ -40,7 +40,12 @@ class RemoteCliSession implements SessionHandle {
     this.claudeSessionId = config.resumeSessionId;
   }
 
-  send(message: string): void {
+  send(
+    message: string,
+    _attachments?: { name: string; url: string; type: string }[],
+    _clientId?: string,
+    _withFiles?: boolean,
+  ): void {
     this.resetIdleTimer();
     this.doneFired = false;
 
@@ -62,7 +67,6 @@ class RemoteCliSession implements SessionHandle {
 
     const child = spawn('ssh', sshArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
     });
     this.process = child;
 

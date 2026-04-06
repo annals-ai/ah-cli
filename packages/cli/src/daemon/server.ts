@@ -21,6 +21,8 @@ import {
 import type { DaemonEnvelope, DaemonRequest } from './protocol.js';
 import type { AutoPruneConfig } from './types.js';
 import { shutdownProviders } from '../providers/index.js';
+import { loadToken } from '../platform/auth.js';
+import { createClient } from '../platform/api-client.js';
 import { log } from '../utils/logger.js';
 import { createUiApiHandler } from '../ui/api-routes.js';
 import { startUiHttpServer, type UiHttpServerHandle } from '../ui/http-server.js';
@@ -576,22 +578,13 @@ export class AgentNetworkDaemonServer {
             lastSyncedAt: b.lastSyncedAt,
           };
         });
-        const hasToken = !!(await import('../platform/auth.js')).loadToken();
-        let network: { id: string | null; name: string | null; memberCount: number; role: string | null } | null = null;
-        if (hasToken) {
-          try {
-            const client = (await import('../platform/api-client.js')).createClient();
-            network = await client.get<{ id: string | null; name: string | null; memberCount: number; role: string | null }>('/api/developer/network');
-          } catch {
-            // Platform may not support network endpoint yet
-          }
-        }
-        return { provider: 'agents-hot', authenticated: hasToken, agents, network };
+        const hasToken = !!loadToken();
+        return { provider: 'agents-hot', authenticated: hasToken, agents, network: null };
       }
 
       case 'provider.join': {
         const inviteCode = expectString(request.params?.inviteCode, 'inviteCode');
-        const client = (await import('../platform/api-client.js')).createClient();
+        const client = createClient();
         return client.post<{ network: { id: string; name: string }; role: string }>(
           '/api/developer/network/join',
           { inviteCode },
@@ -599,7 +592,7 @@ export class AgentNetworkDaemonServer {
       }
 
       case 'provider.invite': {
-        const client = (await import('../platform/api-client.js')).createClient();
+        const client = createClient();
         return client.post<{ inviteCode: string; expiresAt: string; sentTo: string | null }>(
           '/api/developer/network/invite',
           {
@@ -611,7 +604,7 @@ export class AgentNetworkDaemonServer {
       }
 
       case 'provider.members': {
-        const client = (await import('../platform/api-client.js')).createClient();
+        const client = createClient();
         return client.get<{ members: Array<{ id: string; name: string | null; email: string | null; role: string; agentCount: number; joinedAt: string; lastActiveAt: string | null }> }>(
           '/api/developer/network/members',
         );
@@ -619,7 +612,7 @@ export class AgentNetworkDaemonServer {
 
       case 'provider.kick': {
         const memberId = expectString(request.params?.memberId, 'memberId');
-        const client = (await import('../platform/api-client.js')).createClient();
+        const client = createClient();
         return client.post<{ ok: boolean; memberId: string }>(
           '/api/developer/network/kick',
           { memberId },

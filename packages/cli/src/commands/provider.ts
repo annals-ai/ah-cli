@@ -171,6 +171,8 @@ export function registerProviderCommand(program: Command): void {
     .description('Remove a member from the provider network')
     .option('--force', 'Skip confirmation')
     .action(async (memberId: string, opts: { force?: boolean }) => {
+      await ensureDaemonRunning();
+
       if (!opts.force) {
         const { createInterface } = await import('node:readline');
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -184,7 +186,6 @@ export function registerProviderCommand(program: Command): void {
         }
       }
 
-      await ensureDaemonRunning();
       const result = await requestDaemon<{
         ok: boolean;
         memberId: string;

@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { CliAdapter } from '../adapters/cli-session.js';
 import { CliAdapter as RuntimeCliAdapter } from '../adapters/cli-session.js';
 import { RemoteCliAdapter } from '../adapters/remote-session.js';
-import type { AgentAdapter } from '../adapters/base.js';
-import type { SessionDonePayload, SessionHandle, ToolEvent } from '../adapters/base.js';
+import type { AgentAdapter, SessionDonePayload, SessionHandle, ToolEvent } from '../adapters/base.js';
 import { getProfile } from '../adapters/profiles.js';
 import { createClient, PlatformApiError } from '../platform/api-client.js';
 import { createLocalRuntimeQueue, type QueueLease, type RuntimeQueueController } from '../utils/local-runtime-queue.js';
@@ -84,7 +82,7 @@ export function buildPromptFromHistory(messages: SessionMessage[], nextMessage: 
 }
 
 export class DaemonRuntime {
-  private adapters = new Map<string, CliAdapter>();
+  private adapters = new Map<string, AgentAdapter>();
   private managedSessions = new Map<string, ManagedSession>();
   private sessionChains = new Map<string, Promise<unknown>>();
   private runtimeQueue: RuntimeQueueController;
@@ -359,6 +357,14 @@ export class DaemonRuntime {
     return { session, agent };
   }
 
+  /** Invalidate cached adapter for an agent (e.g. after config change). */
+  invalidateAdapter(agentId: string): void {
+    const adapter = this.adapters.get(agentId);
+    if (adapter) {
+      this.adapters.delete(agentId);
+    }
+  }
+
   private getAdapter(agent: DaemonAgent): AgentAdapter {
     let adapter = this.adapters.get(agent.id);
     if (!adapter) {
@@ -367,7 +373,7 @@ export class DaemonRuntime {
         adapter = new RemoteCliAdapter(profile, agent.remoteHost, {
           project: agent.projectPath,
           agentId: agent.id,
-        }) as unknown as CliAdapter;
+        });
       } else {
         adapter = new RuntimeCliAdapter(profile, {
           project: agent.projectPath,
