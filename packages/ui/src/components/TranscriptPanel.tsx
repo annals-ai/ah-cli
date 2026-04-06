@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from 'react';
 import { Archive, MessageSquarePlus, Search, Send, SquareSplitHorizontal, StopCircle } from 'lucide-react';
-import type { AgentRecord, SessionMessage, SessionRecord, TaskRecord } from '../api';
+import type { AgentRecord, SessionMessage, SessionRecord } from '../api';
 
 import {
   Conversation,
@@ -21,7 +21,6 @@ import { cn } from '@/lib/utils';
 
 interface TranscriptPanelProps {
   agents: AgentRecord[];
-  tasks: TaskRecord[];
   session: SessionRecord | null;
   messages: SessionMessage[];
   loading: boolean;
@@ -29,11 +28,9 @@ interface TranscriptPanelProps {
   actionState: 'stop' | 'archive' | 'fork' | 'send' | null;
   forkTitle: string;
   composerAgentId: string;
-  composerTaskGroupId: string;
   composerMessage: string;
   onForkTitleChange(value: string): void;
   onComposerAgentChange(value: string): void;
-  onComposerTaskGroupChange(value: string): void;
   onComposerMessageChange(value: string): void;
   onStop(): void;
   onArchive(): void;
@@ -58,7 +55,6 @@ function normalizeRole(role: string): 'assistant' | 'system' | 'tool' | 'user' |
 
 export function TranscriptPanel({
   agents,
-  tasks,
   session,
   messages,
   loading,
@@ -66,11 +62,9 @@ export function TranscriptPanel({
   actionState,
   forkTitle,
   composerAgentId,
-  composerTaskGroupId,
   composerMessage,
   onForkTitleChange,
   onComposerAgentChange,
-  onComposerTaskGroupChange,
   onComposerMessageChange,
   onStop,
   onArchive,
@@ -180,7 +174,7 @@ export function TranscriptPanel({
             </div>
 
             {!session ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3">
                 <label className="grid gap-2">
                   <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">
                     {t('common.agent')}
@@ -196,24 +190,6 @@ export function TranscriptPanel({
                     {agents.map((agent) => (
                       <option key={agent.id} value={agent.id}>
                         {agent.name}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </label>
-
-                <label className="grid gap-2">
-                  <span className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">
-                    {t('common.taskGroup')}
-                  </span>
-                  <NativeSelect
-                    value={composerTaskGroupId}
-                    onChange={(event) => onComposerTaskGroupChange(event.target.value)}
-                    disabled={actionState !== null}
-                  >
-                    <option value="none">{t('transcript.noTaskGroup')}</option>
-                    {tasks.map((task) => (
-                      <option key={task.id} value={task.id}>
-                        {task.title}
                       </option>
                     ))}
                   </NativeSelect>

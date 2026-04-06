@@ -370,7 +370,6 @@ export class AgentNetworkDaemonServer {
           uiPort: this.uiPort,
           agents: this.store.listAgents().length,
           sessions: this.store.listSessions({ status: 'all' }).length,
-          taskGroups: this.store.listTaskGroups().length,
           providerBindings: this.store.listProviderBindings().length,
           onlineBindings: this.store.listProviderBindings().filter((binding) => binding.status === 'online').length,
         };
@@ -439,7 +438,7 @@ export class AgentNetworkDaemonServer {
             }
 
             // Check runtime type is supported
-            const supportedRuntimes = ['claude', 'codex', 'gemini', 'openai'];
+            const supportedRuntimes = ['claude', 'gemini', 'openai'];
             if (!supportedRuntimes.includes(agent.runtimeType.toLowerCase())) {
               return {
                 agentRef: ref,
@@ -533,48 +532,6 @@ export class AgentNetworkDaemonServer {
         return unexposeManagedAgent({ store: this.store, runtime: this.runtime }, ref, providerName);
       }
 
-      case 'task.create': {
-        const taskGroup = this.store.createTaskGroup({
-          title: expectString(request.params?.title, 'title'),
-          ownerPrincipal: typeof request.params?.ownerPrincipal === 'string' ? request.params.ownerPrincipal : 'owner:local',
-          source: typeof request.params?.source === 'string' ? request.params.source : 'cli',
-          status: typeof request.params?.status === 'string' ? request.params.status : 'active',
-          metadata: typeof request.params?.metadata === 'object' && request.params?.metadata
-            ? request.params.metadata as Record<string, unknown>
-            : {},
-        });
-        return { taskGroup };
-      }
-
-      case 'task.list': {
-        const status = request.params?.status as string | undefined;
-        return { taskGroups: this.store.listTaskGroups({ status }) };
-      }
-
-      case 'task.show': {
-        const id = expectString(request.params?.id, 'id');
-        const taskGroup = this.store.getTaskGroup(id);
-        if (!taskGroup) throw new Error(`Task group not found: ${id}`);
-        return {
-          taskGroup,
-          sessions: this.store.listSessions({ taskGroupId: id, status: 'all' }),
-        };
-      }
-
-      case 'task.archive': {
-        const id = expectString(request.params?.id, 'id');
-        return { taskGroup: this.store.archiveTaskGroup(id) };
-      }
-
-      case 'task.update': {
-        const id = expectString(request.params?.id, 'id');
-        const taskGroup = this.store.updateTaskGroup(id, {
-          title: typeof request.params?.title === 'string' ? request.params.title : undefined,
-          status: typeof request.params?.status === 'string' ? request.params.status : undefined,
-        });
-        return { taskGroup };
-      }
-
       case 'session.list': {
         let agentId: string | undefined;
         if (typeof request.params?.agentRef === 'string' && request.params.agentRef.trim()) {
@@ -590,7 +547,6 @@ export class AgentNetworkDaemonServer {
         return {
           sessions: this.store.listSessions({
             agentId,
-            taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
             status: typeof request.params?.status === 'string'
               ? request.params.status as 'queued' | 'active' | 'idle' | 'paused' | 'completed' | 'failed' | 'archived' | 'all'
               : 'all',
@@ -645,7 +601,6 @@ export class AgentNetworkDaemonServer {
         if (!resolvedId) throw new Error(`Session not found: ${id}`);
         const session = this.store.forkSession({
           sourceSessionId: resolvedId,
-          taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
           title: typeof request.params?.title === 'string' ? request.params.title : undefined,
           tags: normalizeTags(request.params?.tags),
         });
@@ -702,9 +657,6 @@ export class AgentNetworkDaemonServer {
         const maxParallel = typeof request.params?.maxParallel === 'number'
           ? Math.max(1, Math.min(request.params.maxParallel, 20))
           : 4;
-        const taskGroupId = typeof request.params?.taskGroupId === 'string'
-          ? request.params.taskGroupId
-          : undefined;
         const tags = normalizeTags(request.params?.tags);
 
         // Limit concurrent session creations
@@ -728,7 +680,6 @@ export class AgentNetworkDaemonServer {
                 // Create idle session for this agent
                 const session = this.store.createSession({
                   agentId: agent.id,
-                  taskGroupId,
                   origin: 'local_cli',
                   principalType: 'owner_local',
                   principalId: 'owner',
@@ -789,9 +740,6 @@ export class AgentNetworkDaemonServer {
         const maxParallel = typeof request.params?.maxParallel === 'number'
           ? Math.max(1, Math.min(request.params.maxParallel, 20))
           : 4;
-        const taskGroupId = typeof request.params?.taskGroupId === 'string'
-          ? request.params.taskGroupId
-          : undefined;
         const tags = normalizeTags(request.params?.tags);
         const timeoutMs = typeof request.params?.timeoutMs === 'number'
           ? request.params.timeoutMs
@@ -801,7 +749,6 @@ export class AgentNetworkDaemonServer {
           agentRef,
           messages,
           maxParallel,
-          taskGroupId,
           tags,
           timeoutMs,
         }, (event) => emit(event));
@@ -823,7 +770,6 @@ export class AgentNetworkDaemonServer {
             forkFromSessionId: typeof request.params?.forkFromSessionId === 'string' ? request.params.forkFromSessionId : undefined,
             message: expectString(request.params?.message, 'message'),
             mode: request.method === 'runtime.chat' ? 'chat' : 'call',
-            taskGroupId: typeof request.params?.taskGroupId === 'string' ? request.params.taskGroupId : undefined,
             title: typeof request.params?.title === 'string' ? request.params.title : undefined,
             tags: normalizeTags(request.params?.tags),
             principalType: 'owner_local',
@@ -842,21 +788,6 @@ export class AgentNetworkDaemonServer {
         } finally {
           clearInterval(keepalive);
         }
-      }
-
-      case 'runtime.fan-out': {
-        const task = expectString(request.params?.task, 'task');
-        const agentRefs = Array.isArray(request.params?.agentRefs)
-          ? (request.params.agentRefs as string[]).map(String)
-          : [];
-        if (agentRefs.length === 0) throw new Error('agentRefs must be a non-empty array');
-        const result = await this.runtime.fanOut({
-          task,
-          agentRefs,
-          synthesizerRef: typeof request.params?.synthesizerRef === 'string' ? request.params.synthesizerRef : undefined,
-          tags: normalizeTags(request.params?.tags),
-        }, emit);
-        return result;
       }
 
       case 'config.get': {

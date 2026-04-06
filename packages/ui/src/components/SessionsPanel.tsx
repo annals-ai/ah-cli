@@ -1,5 +1,5 @@
-import type { AgentRecord, SessionRecord, SessionStatus, TaskRecord } from '../api';
-import { Funnel, History, Layers3 } from 'lucide-react';
+import type { AgentRecord, SessionRecord, SessionStatus } from '../api';
+import { Funnel, History } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,13 +11,11 @@ import { cn } from '@/lib/utils';
 
 interface SessionFilters {
   agentId: string;
-  taskGroupId: string;
   status: SessionStatus | 'all';
 }
 
 interface SessionsPanelProps {
   agents: AgentRecord[];
-  tasks: TaskRecord[];
   sessions: SessionRecord[];
   filters: SessionFilters;
   selectedSessionId: string | null;
@@ -38,7 +36,6 @@ const STATUS_OPTIONS: Array<SessionStatus | 'all'> = [
 
 export function SessionsPanel({
   agents,
-  tasks,
   sessions,
   filters,
   selectedSessionId,
@@ -56,7 +53,7 @@ export function SessionsPanel({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <label className="grid gap-2">
             <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
               <Funnel className="size-3.5" />
@@ -70,24 +67,6 @@ export function SessionsPanel({
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
-                  </option>
-                ))}
-            </NativeSelect>
-          </label>
-
-          <label className="grid gap-2">
-            <span className="text-muted-foreground flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em]">
-              <Layers3 className="size-3.5" />
-              {t('sessions.taskGroupFilter')}
-            </span>
-            <NativeSelect
-              value={filters.taskGroupId}
-              onChange={(event) => onFiltersChange({ ...filters, taskGroupId: event.target.value })}
-            >
-              <option value="all">{t('sessions.allTaskGroups')}</option>
-                {tasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title}
                   </option>
                 ))}
             </NativeSelect>
@@ -143,7 +122,6 @@ export function SessionsPanel({
 
                   <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
                     <span>{formatDateTime(session.lastActiveAt)}</span>
-                    <span>{session.taskGroupId ? t('sessions.taskLinked') : t('sessions.standalone')}</span>
                     <span>{t('sessions.tagsCount', { count: session.tags.length })}</span>
                   </div>
 

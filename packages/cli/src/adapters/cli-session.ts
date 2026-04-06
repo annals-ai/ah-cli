@@ -13,17 +13,11 @@ import { log } from '../utils/logger.js';
 import { createInterface } from 'node:readline';
 import { which } from '../utils/which.js';
 import { createClientWorkspace } from '../utils/client-workspace.js';
-import { writeFile, mkdir, stat } from 'node:fs/promises';
-import { join, relative, basename } from 'node:path';
-import { collectRealFiles } from '../utils/auto-upload.js';
-import { createZipBuffer } from '../utils/zip.js';
-import { sha256Hex } from '../utils/webrtc-transfer.js';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join, basename } from 'node:path';
 
 const DEFAULT_IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 const MIN_IDLE_TIMEOUT = 60 * 1000; // 1 minute guardrail
-
-const MAX_COLLECT_FILES = 5000;
-const DEFAULT_ZIP_MAX_BYTES = 200 * 1024 * 1024; // 200MB
 
 function resolveIdleTimeoutMs(): number {
   const raw = process.env.AGENT_BRIDGE_CLAUDE_IDLE_TIMEOUT_MS;
@@ -56,9 +50,6 @@ class CliSession implements SessionHandle {
   /** Per-client workspace path (symlink-based), set on each send() */
   private currentWorkspace: string | undefined;
 
-  /** Whether caller requested file transfer */
-  private withFiles = false;
-
   /** Claude Code session ID for --resume across messages */
   private claudeSessionId: string | undefined;
 
@@ -82,12 +73,10 @@ class CliSession implements SessionHandle {
     message: string,
     attachments?: { name: string; url: string; type: string }[],
     clientId?: string,
-    withFiles?: boolean,
   ): void {
     this.resetIdleTimer();
     this.doneFired = false;
     this.chunksEmitted = false;
-    this.withFiles = withFiles || false;
 
     // Reset parser for new message
     this.parser = this.profile.createParser();
@@ -237,73 +226,10 @@ class CliSession implements SessionHandle {
     }
   }
 
-  private getWorkspaceRoot(): string {
-    return this.currentWorkspace || this.config.project || process.cwd();
-  }
-
-  private async collectWorkspaceFiles(workspaceRoot: string): Promise<string[]> {
-    return collectRealFiles(workspaceRoot, MAX_COLLECT_FILES);
-  }
-
-  private async createWorkspaceZip(workspaceRoot: string): Promise<{ zipBuffer: Buffer; fileCount: number } | null> {
-    const files = await this.collectWorkspaceFiles(workspaceRoot);
-    if (files.length === 0) return null;
-
-    const entries: Array<{ path: string; data: Buffer }> = [];
-    let totalBytes = 0;
-
-    for (const absPath of files) {
-      const relPath = relative(workspaceRoot, absPath).replace(/\\/g, '/');
-      if (!relPath || relPath.startsWith('..')) continue;
-      try {
-        const fileStat = await stat(absPath);
-        if (!fileStat.isFile()) continue;
-
-        const { readFile } = await import('node:fs/promises');
-        const buffer = await readFile(absPath);
-        if (buffer.length === 0) continue;
-        totalBytes += buffer.length;
-        if (totalBytes > DEFAULT_ZIP_MAX_BYTES) {
-          log.warn(`Workspace exceeds ${DEFAULT_ZIP_MAX_BYTES / 1024 / 1024}MB limit, truncating`);
-          break;
-        }
-        entries.push({ path: relPath, data: buffer });
-      } catch {
-        // ignore transient files
-      }
-    }
-
-    if (entries.length === 0) return null;
-
-    const zipBuffer = createZipBuffer(entries);
-    return { zipBuffer, fileCount: entries.length };
-  }
-
   private async finalizeDone(attachments?: OutputAttachment[]): Promise<void> {
     const payload: SessionDonePayload = {};
     if (attachments && attachments.length > 0) {
       payload.attachments = attachments;
-    }
-
-    if (this.withFiles) {
-      const workspaceRoot = this.getWorkspaceRoot();
-      try {
-        const result = await this.createWorkspaceZip(workspaceRoot);
-        if (result) {
-          const transferId = crypto.randomUUID();
-          const zipSha256 = sha256Hex(result.zipBuffer);
-          payload.fileTransferOffer = {
-            transfer_id: transferId,
-            zip_size: result.zipBuffer.length,
-            zip_sha256: zipSha256,
-            file_count: result.fileCount,
-          };
-          payload.zipBuffer = result.zipBuffer;
-          log.info(`[WebRTC] ZIP ready: ${result.fileCount} files, ${result.zipBuffer.length} bytes, transfer=${transferId.slice(0, 8)}...`);
-        }
-      } catch (error) {
-        log.warn(`ZIP creation failed: ${error}`);
-      }
     }
 
     for (const cb of this.doneCallbacks) cb(payload);

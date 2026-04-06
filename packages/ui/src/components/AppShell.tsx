@@ -41,7 +41,6 @@ export function AppShell({
     { id: 'agents', label: t('shell.nav.agents') },
     { id: 'sessions', label: t('shell.nav.sessions') },
     { id: 'transcript', label: t('shell.nav.transcript') },
-    { id: 'tasks', label: t('shell.nav.tasks') },
     { id: 'exposure', label: t('shell.nav.exposure') },
     { id: 'logs', label: t('shell.nav.logs') },
   ];

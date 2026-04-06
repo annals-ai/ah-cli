@@ -145,13 +145,8 @@ describe('AgentNetworkDaemonServer UI API', () => {
       projectPath: '/tmp/dashboard-agent',
       capabilities: ['monitoring'],
     });
-    const taskGroup = store.createTaskGroup({
-      title: 'Realtime UI',
-      source: 'ui',
-    });
     store.createSession({
       agentId: agent.id,
-      taskGroupId: taskGroup.id,
       title: 'Observe live changes',
       status: 'idle',
     });
@@ -163,12 +158,11 @@ describe('AgentNetworkDaemonServer UI API', () => {
     const dashboard = await fetchJson<{
       status: {
         daemon: { uiBaseUrl: string | null };
-        counts: { agents: number; sessions: number; taskGroups: number };
+        counts: { agents: number; sessions: number };
       };
       agents: Array<{ id: string }>;
       providerCatalog: string[];
       sessions: Array<{ agentId: string }>;
-      tasks: Array<{ id: string }>;
       logs: string[];
       logPath: string | null;
     }>(`${address.uiBaseUrl}/api/dashboard?lines=50`);
@@ -177,11 +171,9 @@ describe('AgentNetworkDaemonServer UI API', () => {
     expect(dashboard.status.counts).toMatchObject({
       agents: 1,
       sessions: 1,
-      taskGroups: 1,
     });
     expect(dashboard.agents[0]?.id).toBe(agent.id);
     expect(dashboard.sessions[0]?.agentId).toBe(agent.id);
-    expect(dashboard.tasks[0]?.id).toBe(taskGroup.id);
     expect(dashboard.providerCatalog.length).toBeGreaterThan(0);
     expect(Array.isArray(dashboard.logs)).toBe(true);
     expect(typeof dashboard.logPath).toBe('string');
@@ -278,10 +270,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
       projectPath: '/tmp/operator-agent',
       capabilities: ['ops'],
     });
-    const task = store.createTaskGroup({
-      title: 'Incident review',
-      source: 'ui',
-    });
     store.close();
 
     server = new AgentNetworkDaemonServer({ dbPath, uiPort: 0 });
@@ -294,7 +282,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
       agentRef?: string;
       sessionId?: string;
       message: string;
-      taskGroupId?: string;
       mode: 'chat' | 'call';
     }) => {
       const resolvedAgent = input.sessionId
@@ -304,7 +291,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
         ? serverStore.getSession(input.sessionId)!
         : serverStore.createSession({
             agentId: resolvedAgent.id,
-            taskGroupId: input.taskGroupId,
             title: input.message,
             status: 'idle',
           });
@@ -329,11 +315,10 @@ describe('AgentNetworkDaemonServer UI API', () => {
       };
     };
 
-    const created = await postJson<{ session: { id: string; taskGroupId: string | null }; messages: Array<{ content: string }> }>(
+    const created = await postJson<{ session: { id: string }; messages: Array<{ content: string }> }>(
       `${address.uiBaseUrl}/api/runtime/chat`,
       {
         agentRef: agent.slug,
-        taskGroupId: task.id,
         message: 'Draft the initial incident summary.',
       },
     );
@@ -350,7 +335,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
       `${address.uiBaseUrl}/api/sessions/${created.session.id}/messages`,
     );
 
-    expect(created.session.taskGroupId).toBe(task.id);
     expect(continued.session.id).toBe(created.session.id);
     expect(created.messages.at(-1)?.content).toBe('Echo: Draft the initial incident summary.');
     expect(continued.messages.at(-1)?.content).toBe('Echo: Add the next remediation step.');
@@ -362,48 +346,12 @@ describe('AgentNetworkDaemonServer UI API', () => {
     ]);
   });
 
-  it('creates and archives task groups through the ui api', async () => {
-    server = new AgentNetworkDaemonServer({ dbPath, uiPort: 0 });
-    const address = await server.listenForTest();
-
-    const created = await postJson<{ taskGroup: { id: string; title: string; status: string; source: string } }>(
-      `${address.uiBaseUrl}/api/tasks`,
-      {
-        title: 'UI Follow-ups',
-        source: 'ui',
-      },
-    );
-
-    const archived = await postJson<{ taskGroup: { id: string; status: string } }>(
-      `${address.uiBaseUrl}/api/tasks/${created.taskGroup.id}/archive`,
-      {},
-    );
-
-    const tasks = await fetchJson<{ items: Array<{ id: string; title: string; status: string }> }>(
-      `${address.uiBaseUrl}/api/tasks`,
-    );
-
-    expect(created.taskGroup).toMatchObject({
-      title: 'UI Follow-ups',
-      status: 'active',
-      source: 'ui',
-    });
-    expect(archived.taskGroup).toMatchObject({
-      id: created.taskGroup.id,
-      status: 'archived',
-    });
-    expect(tasks.items.find((task) => task.id === created.taskGroup.id)).toMatchObject({
-      title: 'UI Follow-ups',
-      status: 'archived',
-    });
-  });
-
   it('creates, updates, removes, and exposes agents through the ui api', async () => {
     server = new AgentNetworkDaemonServer({ dbPath, uiPort: 0 });
     const address = await server.listenForTest();
 
     const providerCatalog = await fetchJson<{ items: string[] }>(`${address.uiBaseUrl}/api/providers/catalog`);
-    expect(providerCatalog.items).toContain('generic-a2a');
+    expect(providerCatalog.items).toContain('agents-hot');
 
     const created = await postJson<{ agent: { id: string; slug: string; visibility: string } }>(
       `${address.uiBaseUrl}/api/agents`,
@@ -423,21 +371,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
       },
     );
 
-    const exposed = await postJson<{ binding: { provider: string; status: string } }>(
-      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/expose`,
-      {
-        provider: 'generic-a2a',
-        config: {},
-      },
-    );
-
-    const unexposed = await postJson<{ binding: { provider: string; status: string } }>(
-      `${address.uiBaseUrl}/api/agents/${created.agent.slug}/unexpose`,
-      {
-        provider: 'generic-a2a',
-      },
-    );
-
     const removed = await postJson<{ ok: boolean; agentId: string }>(
       `${address.uiBaseUrl}/api/agents/${created.agent.slug}/remove`,
       {},
@@ -450,9 +383,6 @@ describe('AgentNetworkDaemonServer UI API', () => {
       name: 'Updated Monitor Agent',
       sandbox: true,
     });
-    expect(exposed.binding.provider).toBe('generic-a2a');
-    expect(['configured', 'online']).toContain(exposed.binding.status);
-    expect(unexposed.binding.status).toBe('inactive');
     expect(removed.ok).toBe(true);
     expect(agents.items.find((agent) => agent.id === removed.agentId)).toBeUndefined();
   });

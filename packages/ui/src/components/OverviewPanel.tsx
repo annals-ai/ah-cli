@@ -1,5 +1,5 @@
 import type { DaemonStatusResponse } from '../api';
-import { Activity, Boxes, Cable, Clock3, Gauge, Globe2, Link2, Radar } from 'lucide-react';
+import { Activity, Boxes, Cable, Clock3, Gauge, Globe2, Radar } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -32,11 +32,6 @@ export function OverviewPanel({ status }: OverviewPanelProps) {
       detail: t('overview.sessionsDetail'),
     },
     {
-      label: t('tasks.columns.taskGroup'),
-      value: status.counts.taskGroups,
-      detail: t('overview.tasksDetail'),
-    },
-    {
       label: t('overview.bindingsLabel'),
       value: status.counts.providerBindings,
       detail: t('overview.bindingsDetail'),
@@ -67,7 +62,7 @@ export function OverviewPanel({ status }: OverviewPanelProps) {
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           {runtimeMetrics.map((metric) => (
             <article key={metric.label} className="rounded-xl border bg-muted/25 p-4">
               <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.16em]">{metric.label}</p>
@@ -108,7 +103,7 @@ export function OverviewPanel({ status }: OverviewPanelProps) {
           </article>
         </div>
 
-        <div className="grid gap-3 rounded-xl border bg-muted/25 p-4 md:grid-cols-4">
+        <div className="grid gap-3 rounded-xl border bg-muted/25 p-4 md:grid-cols-3">
           <div className="flex items-center gap-2 text-sm">
             <Boxes className="text-muted-foreground size-4" />
             <span>{t('overview.trackedAgents', { count: status.counts.agents })}</span>
@@ -120,10 +115,6 @@ export function OverviewPanel({ status }: OverviewPanelProps) {
           <div className="flex items-center gap-2 text-sm">
             <Activity className="text-muted-foreground size-4" />
             <span>{t('overview.activeExecutions', { count: status.runtime.activeExecutions })}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Link2 className="text-muted-foreground size-4" />
-            <span>{t('overview.taskGroups', { count: status.counts.taskGroups })}</span>
           </div>
         </div>
       </CardContent>

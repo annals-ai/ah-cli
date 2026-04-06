@@ -1,14 +1,8 @@
 import type { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { existsSync, readFileSync, mkdirSync, copyFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import { execSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { tmpdir } from 'node:os';
 import { loadToken } from '../platform/auth.js';
 import { createClient } from '../platform/api-client.js';
 import { resolveAgentId } from '../platform/resolve-agent.js';
-import { FileUploadSender, type SignalMessage } from '../utils/webrtc-transfer.js';
 import { parseSseChunk } from '../utils/sse-parser.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, RESET, YELLOW } from '../utils/table.js';
@@ -22,116 +16,8 @@ import {
 
 const DEFAULT_BASE_URL = 'https://agents.hot';
 
-interface FileUploadOfferInfo {
-  transfer_id: string;
-  zip_size: number;
-  zip_sha256: string;
-  file_count: number;
-}
-
-function prepareUploadFile(filePath: string): { offer: FileUploadOfferInfo; zipBuffer: Buffer } {
-  const fileName = basename(filePath);
-  const tempDir = join(tmpdir(), `chat-upload-${Date.now()}`);
-  mkdirSync(tempDir, { recursive: true });
-
-  const tempFile = join(tempDir, fileName);
-  copyFileSync(filePath, tempFile);
-
-  const zipPath = join(tempDir, 'upload.zip');
-  execSync(`cd "${tempDir}" && zip -q "${zipPath}" "${fileName}"`);
-  const zipBuffer = readFileSync(zipPath);
-
-  try { execSync(`rm -rf "${tempDir}"`); } catch {}
-
-  const zipSha256 = createHash('sha256').update(zipBuffer).digest('hex');
-  const transferId = randomUUID();
-
-  return {
-    offer: {
-      transfer_id: transferId,
-      zip_size: zipBuffer.length,
-      zip_sha256: zipSha256,
-      file_count: 1,
-    },
-    zipBuffer: Buffer.from(zipBuffer),
-  };
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function chatWebrtcUpload(
-  agentId: string,
-  offer: FileUploadOfferInfo,
-  zipBuffer: Buffer,
-  token: string,
-  baseUrl: string,
-): Promise<void> {
-  log.info(`[WebRTC] Uploading file (${(offer.zip_size / 1024).toFixed(1)} KB)...`);
-
-  const sender = new FileUploadSender(offer.transfer_id, zipBuffer);
-
-  const exchangeSignals = async (signal: SignalMessage) => {
-    try {
-      const res = await fetch(`${baseUrl}/api/agents/${agentId}/rtc-signal`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transfer_id: offer.transfer_id,
-          signal_type: signal.signal_type,
-          payload: signal.payload,
-        }),
-      });
-      if (res.ok) {
-        const { signals } = await res.json() as { signals: SignalMessage[] };
-        for (const s of signals) {
-          await sender.handleSignal(s);
-        }
-      }
-    } catch {}
-  };
-
-  sender.onSignal(exchangeSignals);
-  await sender.createOffer();
-
-  const poll = async () => {
-    for (let i = 0; i < 20; i++) {
-      await sleep(500);
-      try {
-        const res = await fetch(`${baseUrl}/api/agents/${agentId}/rtc-signal`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            transfer_id: offer.transfer_id,
-            signal_type: 'poll',
-            payload: '',
-          }),
-        });
-        if (res.ok) {
-          const { signals } = await res.json() as { signals: SignalMessage[] };
-          for (const s of signals) {
-            await sender.handleSignal(s);
-          }
-        }
-      } catch {}
-    }
-  };
-
-  try {
-    await Promise.all([sender.waitForCompletion(30_000), poll()]);
-    log.success(`[WebRTC] File uploaded successfully`);
-  } catch (err) {
-    log.warn(`[WebRTC] Upload failed: ${(err as Error).message}`);
-  } finally {
-    sender.close();
-  }
 }
 
 // --- Stream a single message ---
@@ -216,7 +102,6 @@ export async function asyncChat(opts: ChatOptions): Promise<string | undefined> 
       status: string;
       result?: string;
       attachments?: Array<{ name: string; url: string; type?: string }>;
-      file_transfer_offer?: { file_count: number; transfer_id: string };
       error_message?: string;
       error_code?: string;
     };
@@ -228,9 +113,6 @@ export async function asyncChat(opts: ChatOptions): Promise<string | undefined> 
         for (const att of task.attachments) {
           process.stdout.write(`${GRAY}[file: ${att.name} -> ${att.url}]${RESET}\n`);
         }
-      }
-      if (task.file_transfer_offer) {
-        process.stdout.write(`${GRAY}[files: ${task.file_transfer_offer.file_count} available via WebRTC]${RESET}\n`);
       }
       return returnedSessionKey;
     }
@@ -532,7 +414,7 @@ export function registerChatCommand(program: Command): void {
       } else {
         console.log(`${GRAY}New session (will be created on first message)${RESET}`);
       }
-      console.log(`${GRAY}Type your message and press Enter. /upload <path> to send a file. /quit to exit.${RESET}\n`);
+      console.log(`${GRAY}Type your message and press Enter. /quit to exit.${RESET}\n`);
 
       const rl = createInterface({
         input: process.stdin,
@@ -560,49 +442,6 @@ export function registerChatCommand(program: Command): void {
 
         if (trimmed === '/quit' || trimmed === '/exit' || trimmed === '/q') {
           rl.close();
-          return;
-        }
-
-        // /upload <path> — immediately upload file via prepare-upload signal + WebRTC
-        if (trimmed.startsWith('/upload ')) {
-          const filePath = trimmed.slice(8).trim();
-          if (!filePath) {
-            log.error('Usage: /upload <path>');
-            rl.prompt();
-            return;
-          }
-          if (!existsSync(filePath)) {
-            log.error(`File not found: ${filePath}`);
-            rl.prompt();
-            return;
-          }
-          try {
-            const prepared = prepareUploadFile(filePath);
-            // Send prepare-upload signal so Agent registers upload receiver immediately
-            const prepRes = await fetch(`${opts.baseUrl}/api/agents/${agentId}/rtc-signal`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                transfer_id: prepared.offer.transfer_id,
-                signal_type: 'prepare-upload',
-                payload: JSON.stringify(prepared.offer),
-              }),
-            });
-            if (!prepRes.ok) {
-              log.error(`Failed to signal upload: HTTP ${prepRes.status}`);
-              rl.prompt();
-              return;
-            }
-            await sleep(500); // Let Agent register the upload receiver
-            await chatWebrtcUpload(agentId, prepared.offer, prepared.zipBuffer, token, opts.baseUrl);
-            log.info(`File uploaded. Type a message to continue.`);
-          } catch (err) {
-            log.error(`Upload failed: ${(err as Error).message}`);
-          }
-          rl.prompt();
           return;
         }
 

@@ -8,7 +8,6 @@ import type {
   AppendMessageInput,
   CreateAgentInput,
   CreateSessionInput,
-  CreateTaskGroupInput,
   DaemonSettingRecord,
   DaemonAgent,
   ForkSessionInput,
@@ -18,7 +17,6 @@ import type {
   SessionQuery,
   SessionRecord,
   SessionStatus,
-  TaskGroup,
   UpdateAgentInput,
   UpdateSessionInput,
 } from './types.js';
@@ -116,21 +114,9 @@ export class DaemonStore {
         FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS task_groups (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        owner_principal TEXT NOT NULL,
-        source TEXT NOT NULL,
-        status TEXT NOT NULL,
-        metadata_json TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         agent_id TEXT NOT NULL,
-        task_group_id TEXT,
         parent_session_id TEXT,
         origin TEXT NOT NULL,
         principal_type TEXT NOT NULL,
@@ -143,7 +129,6 @@ export class DaemonStore {
         last_active_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-        FOREIGN KEY (task_group_id) REFERENCES task_groups(id) ON DELETE SET NULL,
         FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL
       );
 
@@ -257,24 +242,10 @@ export class DaemonStore {
     };
   }
 
-  private mapTaskGroup(row: Record<string, unknown>): TaskGroup {
-    return {
-      id: String(row.id),
-      title: String(row.title),
-      ownerPrincipal: String(row.owner_principal),
-      source: String(row.source),
-      status: String(row.status),
-      metadata: parseJson<Record<string, unknown>>(row.metadata_json as string, {}),
-      createdAt: String(row.created_at),
-      updatedAt: String(row.updated_at),
-    };
-  }
-
   private mapSession(row: Record<string, unknown>): SessionRecord {
     return {
       id: String(row.id),
       agentId: String(row.agent_id),
-      taskGroupId: row.task_group_id ? String(row.task_group_id) : null,
       parentSessionId: row.parent_session_id ? String(row.parent_session_id) : null,
       origin: String(row.origin),
       principalType: String(row.principal_type),
@@ -296,7 +267,6 @@ export class DaemonStore {
       agentId: String(row.agent_id),
       agentName: row.agent_name ? String(row.agent_name) : undefined,
       agentSlug: row.agent_slug ? String(row.agent_slug) : undefined,
-      taskGroupId: row.task_group_id ? String(row.task_group_id) : null,
       parentSessionId: row.parent_session_id ? String(row.parent_session_id) : null,
       origin: String(row.origin),
       principalType: String(row.principal_type),
@@ -467,89 +437,17 @@ export class DaemonStore {
     }
   }
 
-  listTaskGroups(query: { status?: string } = {}): TaskGroup[] {
-    const clauses: string[] = [];
-    const params: SqlPrimitive[] = [];
-
-    if (query.status && query.status !== 'all') {
-      clauses.push('status = ?');
-      params.push(query.status);
-    }
-
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const rows = this.db.prepare(`
-      SELECT * FROM task_groups
-      ${where}
-      ORDER BY updated_at DESC, created_at DESC
-    `).all(...params) as Record<string, unknown>[];
-    return rows.map((row) => this.mapTaskGroup(row));
-  }
-
-  createTaskGroup(input: CreateTaskGroupInput): TaskGroup {
-    const now = nowIso();
-    const id = randomUUID();
-    this.db.prepare(`
-      INSERT INTO task_groups (
-        id, title, owner_principal, source, status, metadata_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.title,
-      input.ownerPrincipal ?? 'owner:local',
-      input.source ?? 'cli',
-      input.status ?? 'active',
-      JSON.stringify(input.metadata ?? {}),
-      now,
-      now,
-    );
-    return this.getTaskGroup(id)!;
-  }
-
-  getTaskGroup(taskGroupId: string): TaskGroup | null {
-    const row = this.db.prepare(`SELECT * FROM task_groups WHERE id = ?`).get(taskGroupId) as Record<string, unknown> | undefined;
-    return row ? this.mapTaskGroup(row) : null;
-  }
-
-  archiveTaskGroup(taskGroupId: string): TaskGroup {
-    const current = this.getTaskGroup(taskGroupId);
-    if (!current) throw new Error(`Task group not found: ${taskGroupId}`);
-    this.db.prepare(`
-      UPDATE task_groups
-      SET status = 'archived', updated_at = ?
-      WHERE id = ?
-    `).run(nowIso(), taskGroupId);
-    return this.getTaskGroup(taskGroupId)!;
-  }
-
-  updateTaskGroup(taskGroupId: string, input: { title?: string; status?: string }): TaskGroup {
-    const current = this.getTaskGroup(taskGroupId);
-    if (!current) throw new Error(`Task group not found: ${taskGroupId}`);
-
-    const update: Record<string, SqlPrimitive> = {
-      updated_at: nowIso(),
-    };
-
-    if (input.title !== undefined) update.title = input.title;
-    if (input.status !== undefined) update.status = input.status;
-
-    const built = buildSetClause(update);
-    this.db.prepare(`UPDATE task_groups SET ${built.clause} WHERE id = ?`).run(...built.params, taskGroupId);
-
-    return this.getTaskGroup(taskGroupId)!;
-  }
-
   createSession(input: CreateSessionInput): SessionRecord {
     const now = nowIso();
     const id = input.id ?? randomUUID();
     this.db.prepare(`
       INSERT INTO sessions (
-        id, agent_id, task_group_id, parent_session_id, origin, principal_type, principal_id,
+        id, agent_id, parent_session_id, origin, principal_type, principal_id,
         status, claude_resume_id, title, summary, created_at, last_active_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.agentId,
-      input.taskGroupId ?? null,
       input.parentSessionId ?? null,
       input.origin ?? 'local',
       input.principalType ?? 'owner_local',
@@ -623,10 +521,6 @@ export class DaemonStore {
       clauses.push('s.agent_id = ?');
       params.push(query.agentId);
     }
-    if (query.taskGroupId) {
-      clauses.push('s.task_group_id = ?');
-      params.push(query.taskGroupId);
-    }
     if (query.status && query.status !== 'all') {
       clauses.push('s.status = ?');
       params.push(query.status);
@@ -662,17 +556,6 @@ export class DaemonStore {
     `).all() as Array<{ agent_id: string; count: number }>;
 
     return Object.fromEntries(rows.map((row) => [row.agent_id, Number(row.count)]));
-  }
-
-  getSessionCountsByTaskGroup(): Record<string, number> {
-    const rows = this.db.prepare(`
-      SELECT task_group_id, COUNT(*) AS count
-      FROM sessions
-      WHERE task_group_id IS NOT NULL
-      GROUP BY task_group_id
-    `).all() as Array<{ task_group_id: string; count: number }>;
-
-    return Object.fromEntries(rows.map((row) => [row.task_group_id, Number(row.count)]));
   }
 
   /**
@@ -747,7 +630,6 @@ export class DaemonStore {
       updated_at: nowIso(),
     };
 
-    if (input.taskGroupId !== undefined) update.task_group_id = input.taskGroupId;
     if (input.parentSessionId !== undefined) update.parent_session_id = input.parentSessionId;
     if (input.status !== undefined) update.status = input.status;
     if (input.claudeResumeId !== undefined) update.claude_resume_id = input.claudeResumeId;
@@ -872,7 +754,6 @@ export class DaemonStore {
 
     const cloned = this.createSession({
       agentId: source.agentId,
-      taskGroupId: input.taskGroupId ?? source.taskGroupId,
       parentSessionId: source.id,
       origin: 'fork',
       principalType: source.principalType,

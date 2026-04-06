@@ -28,8 +28,6 @@ import type {
   CallAgentError,
   ChunkKind,
   FileTransferOffer,
-  RtcSignal,
-  RtcSignalRelay,
 } from '@annals/bridge-protocol';
 import { BRIDGE_PROTOCOL_VERSION, WS_CLOSE_REPLACED, WS_CLOSE_TOKEN_REVOKED } from '@annals/bridge-protocol';
 
@@ -37,8 +35,6 @@ const HEARTBEAT_TIMEOUT_MS = 50_000;  // 2.5x CLI heartbeat interval (20s)
 const ALARM_INTERVAL_MS = 15 * 60_000; // 15 min — alarm is fallback only; heartbeat timeout detected via WS path
 const RELAY_TIMEOUT_MS = 120_000;     // 120s without any chunk or heartbeat = dead
 const REGISTER_TIMEOUT_MS = 10_000;   // 10s to send register after WS connect
-const MAX_RTC_SIGNAL_BUFFERS = 100;   // max transfer_ids in rtcSignalBuffer
-const MAX_SIGNALS_PER_TRANSFER = 50;  // max buffered signals per transfer_id
 const MAX_STORED_RESULTS = 100;       // max result: keys in DO storage
 const MAX_RELAY_BODY_BYTES = 5_242_880; // 5 MB max body for relay/a2a
 const TOKEN_REVALIDATE_INTERVAL_MS = 30 * 60_000; // 30 min — revocation handled instantly by /disconnect
@@ -59,8 +55,6 @@ interface AsyncTaskMeta {
 }
 
 const ASYNC_TASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes no chunk = timeout
-const RTC_SIGNAL_BUFFER_TTL_MS = 60_000; // 60 seconds — auto-clean signal buffers
-
 interface SessionSocketAttachment {
   promoted: boolean;
   acceptedAt?: number;
@@ -90,9 +84,6 @@ export class AgentSession implements DurableObject {
   private cachedUserId = '';      // token owner's user_id
 
   private pendingRelays = new Map<string, PendingRelay>();
-  /** Buffer for Agent B's RTC signals destined for HTTP callers */
-  private rtcSignalBuffer = new Map<string, Array<{ signal_type: string; payload: string }>>();
-  private rtcSignalCleanupScheduled: Set<string> | null = null;
   private lastPlatformSyncAt = 0;
   private lastTokenRevalidateAt = 0;
   private lastKvRefreshAt = 0;
@@ -157,16 +148,6 @@ export class AgentSession implements DurableObject {
         return json(400, { error: 'invalid_request', message: 'Missing request_id' });
       }
       return this.handleTaskStatus(requestId);
-    }
-
-    // WebRTC signaling relay (incoming from another agent's DO)
-    if (url.pathname === '/rtc-signal' && request.method === 'POST') {
-      return this.handleIncomingRtcSignal(request);
-    }
-
-    // WebRTC signal exchange — HTTP caller posts signals, gets buffered responses
-    if (url.pathname === '/rtc-signal-exchange' && request.method === 'POST') {
-      return this.handleRtcSignalExchange(request);
     }
 
     // Status check
@@ -344,9 +325,6 @@ export class AgentSession implements DurableObject {
         this.handleCallAgentWs(msg as CallAgent, ws);
         break;
 
-      case 'rtc_signal':
-        this.handleRtcSignal(msg as RtcSignal);
-        break;
     }
   }
 
@@ -922,7 +900,6 @@ export class AgentSession implements DurableObject {
     this.agentId = '';
     this.cachedTokenHash = '';
     this.cachedUserId = '';
-    this.rtcSignalBuffer.clear();
     await this.cleanupAllRelays();
     await this.state.storage.delete('agentId');
     await this.removeKV(agentId);
@@ -1484,149 +1461,6 @@ export class AgentSession implements DurableObject {
         'Connection': 'keep-alive',
       },
     });
-  }
-
-  // ========================================================
-  // WebRTC signaling relay (P2P file transfer)
-  // ========================================================
-
-  /** CLI sends rtc_signal → route to target agent's DO (or buffer for http-caller) */
-  private async handleRtcSignal(msg: RtcSignal): Promise<void> {
-    console.log(`[RTC-Signal] From agent: type=${msg.signal_type} target=${msg.target_agent_id} transfer=${msg.transfer_id.slice(0, 8)}...`);
-    // If target is 'http-caller', buffer signals for HTTP polling retrieval
-    if (msg.target_agent_id === 'http-caller') {
-      // Guard: limit number of transfer_ids and signals per transfer
-      if (!this.rtcSignalBuffer.has(msg.transfer_id) && this.rtcSignalBuffer.size >= MAX_RTC_SIGNAL_BUFFERS) {
-        console.warn(`[RTC-Signal] Buffer full, dropping signal for transfer=${msg.transfer_id.slice(0, 8)}...`);
-        return; // silent drop — too many concurrent transfers
-      }
-      const buf = this.rtcSignalBuffer.get(msg.transfer_id) || [];
-      if (buf.length >= MAX_SIGNALS_PER_TRANSFER) {
-        console.warn(`[RTC-Signal] Too many signals for transfer=${msg.transfer_id.slice(0, 8)}...`);
-        return; // silent drop — too many signals for this transfer
-      }
-      buf.push({ signal_type: msg.signal_type, payload: msg.payload });
-      this.rtcSignalBuffer.set(msg.transfer_id, buf);
-      console.log(`[RTC-Signal] Buffered ${msg.signal_type} for transfer=${msg.transfer_id.slice(0, 8)}... (total=${buf.length})`);
-      return;
-    }
-
-    try {
-      const targetId = this.env.AGENT_SESSIONS.idFromName(msg.target_agent_id);
-      const targetStub = this.env.AGENT_SESSIONS.get(targetId);
-      await targetStub.fetch(new Request('https://internal/rtc-signal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from_agent_id: this.agentId,
-          transfer_id: msg.transfer_id,
-          signal_type: msg.signal_type,
-          payload: msg.payload,
-        }),
-      }));
-    } catch {
-      // Best-effort signaling
-    }
-  }
-
-  /** Incoming RTC signal from another agent's DO → forward to CLI via WS */
-  private async handleIncomingRtcSignal(request: Request): Promise<Response> {
-    const ws = this.getPrimarySocket();
-    if (!ws || !this.authenticated) {
-      return json(404, { error: 'agent_offline', message: 'Agent is not connected' });
-    }
-
-    let body: { from_agent_id: string; transfer_id: string; signal_type: string; payload: string };
-    try {
-      body = await request.json() as typeof body;
-    } catch {
-      return json(400, { error: 'invalid_message', message: 'Invalid JSON body' });
-    }
-
-    const relay: RtcSignalRelay = {
-      type: 'rtc_signal_relay',
-      transfer_id: body.transfer_id,
-      from_agent_id: body.from_agent_id,
-      signal_type: body.signal_type as RtcSignalRelay['signal_type'],
-      payload: body.payload,
-    };
-
-    try {
-      ws.send(JSON.stringify(relay));
-    } catch {
-      return json(502, { error: 'agent_offline', message: 'Failed to send signal to agent' });
-    }
-
-    return json(200, { ok: true });
-  }
-
-  /**
-   * POST /rtc-signal-exchange — HTTP caller posts SDP/ICE signals, gets buffered Agent B responses.
-   * Body: { transfer_id, signal_type, payload }
-   * signal_type='poll' → only returns buffered signals, no forwarding.
-   */
-  private async handleRtcSignalExchange(request: Request): Promise<Response> {
-    let body: { transfer_id: string; signal_type: string; payload: string; client_id?: string; ice_servers?: RtcSignalRelay['ice_servers'] };
-    try {
-      body = await request.json() as typeof body;
-    } catch {
-      return json(400, { error: 'invalid_message', message: 'Invalid JSON body' });
-    }
-
-    const { transfer_id, signal_type, payload } = body;
-
-    // Forward caller's signal to Agent B via WS (unless it's a poll-only request)
-    if (signal_type !== 'poll') {
-      const ws = this.getPrimarySocket();
-      if (!ws || !this.authenticated) {
-        console.warn(`[RTC-Exchange] Agent offline for ${signal_type} signal, transfer=${transfer_id.slice(0, 8)}...`);
-        return json(404, { error: 'agent_offline', message: 'Agent is not connected' });
-      }
-
-      const relay: RtcSignalRelay = {
-        type: 'rtc_signal_relay',
-        transfer_id,
-        from_agent_id: 'http-caller',
-        signal_type: signal_type as RtcSignalRelay['signal_type'],
-        payload,
-        ...(body.client_id && { client_id: body.client_id }),
-        ...(body.ice_servers && { ice_servers: body.ice_servers }),
-      };
-
-      try {
-        ws.send(JSON.stringify(relay));
-        console.log(`[RTC-Exchange] Forwarded ${signal_type} to agent, transfer=${transfer_id.slice(0, 8)}...`);
-      } catch (err) {
-        console.error(`[RTC-Exchange] WS send failed for ${signal_type}: ${err}`);
-        return json(502, { error: 'agent_offline', message: 'Failed to send signal to agent' });
-      }
-    }
-
-    // Drain buffered signals from Agent B → return to HTTP caller
-    const signals = this.rtcSignalBuffer.get(transfer_id) || [];
-    // Only clear buffer when there are signals to drain (prevents race condition
-    // where early poll clears buffer before agent's answer arrives)
-    if (signals.length > 0) {
-      this.rtcSignalBuffer.delete(transfer_id);
-    }
-
-    // Schedule cleanup for this transfer_id's buffer after TTL
-    if (!this.rtcSignalCleanupScheduled?.has(transfer_id)) {
-      if (!this.rtcSignalCleanupScheduled) {
-        this.rtcSignalCleanupScheduled = new Set();
-      }
-      this.rtcSignalCleanupScheduled.add(transfer_id);
-      setTimeout(() => {
-        this.rtcSignalBuffer.delete(transfer_id);
-        this.rtcSignalCleanupScheduled?.delete(transfer_id);
-      }, RTC_SIGNAL_BUFFER_TTL_MS);
-    }
-
-    if (signals.length > 0 || signal_type !== 'poll') {
-      console.log(`[RTC-Exchange] Returning ${signals.length} buffered signals for transfer=${transfer_id.slice(0, 8)}... (request_type=${signal_type})`);
-    }
-
-    return json(200, { ok: true, signals });
   }
 
   // ========================================================

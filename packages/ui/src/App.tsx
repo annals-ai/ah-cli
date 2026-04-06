@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   archiveSession,
-  archiveTaskGroup,
   createAgent,
-  createTaskGroup,
   exposeAgent,
   forkSession,
   getDashboardData,
@@ -28,7 +26,6 @@ import { ExposurePanel } from './components/ExposurePanel';
 import { LogsPanel } from './components/LogsPanel';
 import { OverviewPanel } from './components/OverviewPanel';
 import { SessionsPanel } from './components/SessionsPanel';
-import { TasksPanel } from './components/TasksPanel';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TabsContent } from '@/components/ui/tabs';
@@ -36,13 +33,11 @@ import { useI18n } from '@/lib/i18n';
 
 interface SessionFilters {
   agentId: string;
-  taskGroupId: string;
   status: SessionStatus | 'all';
 }
 
 const DEFAULT_FILTERS: SessionFilters = {
   agentId: 'all',
-  taskGroupId: 'all',
   status: 'all',
 };
 
@@ -51,7 +46,6 @@ const CONSOLE_TABS = [
   'agents',
   'sessions',
   'transcript',
-  'tasks',
   'exposure',
   'logs',
 ] as const;
@@ -91,7 +85,6 @@ export default function App() {
   const [liveLogPath, setLiveLogPath] = useState<string | null>(null);
   const [composerMessage, setComposerMessage] = useState('');
   const [composerAgentId, setComposerAgentId] = useState('');
-  const [composerTaskGroupId, setComposerTaskGroupId] = useState('none');
   const [actionState, setActionState] = useState<'stop' | 'archive' | 'fork' | 'send' | null>(null);
   const [daemonActionState, setDaemonActionState] = useState<'stop' | 'restart' | null>(null);
   const refreshInFlightRef = useRef(false);
@@ -181,9 +174,8 @@ export default function App() {
   const filteredSessions = dashboard
     ? dashboard.sessions.filter((session) => {
         const matchesAgent = filters.agentId === 'all' || session.agentId === filters.agentId;
-        const matchesTask = filters.taskGroupId === 'all' || session.taskGroupId === filters.taskGroupId;
         const matchesStatus = filters.status === 'all' || session.status === filters.status;
-        return matchesAgent && matchesTask && matchesStatus;
+        return matchesAgent && matchesStatus;
       })
     : [];
 
@@ -320,16 +312,6 @@ export default function App() {
     await refreshDashboard(selectedSessionId);
   }
 
-  async function handleCreateTask(title: string, source: string): Promise<void> {
-    await createTaskGroup({ title, source });
-    await refreshDashboard(selectedSessionId);
-  }
-
-  async function handleArchiveTask(taskGroupId: string): Promise<void> {
-    await archiveTaskGroup(taskGroupId);
-    await refreshDashboard(selectedSessionId);
-  }
-
   async function handleSendMessage(): Promise<void> {
     const message = composerMessage.trim();
     if (!message) return;
@@ -339,8 +321,6 @@ export default function App() {
       return;
     }
 
-    const draftTaskGroupId = !selectedSession && composerTaskGroupId !== 'none' ? composerTaskGroupId : undefined;
-
     setActionState('send');
     setError(null);
 
@@ -349,7 +329,6 @@ export default function App() {
         setFilters((current) => ({
           ...current,
           agentId: draftAgentId,
-          taskGroupId: draftTaskGroupId ?? 'all',
           status: 'all',
         }));
       }
@@ -357,7 +336,6 @@ export default function App() {
       const result = await sendLocalChatTurn({
         agentRef: selectedSession ? undefined : draftAgentId,
         sessionId: selectedSession?.id ?? undefined,
-        taskGroupId: draftTaskGroupId,
         message,
       });
 
@@ -499,7 +477,6 @@ export default function App() {
           <TabsContent value="sessions" className="mt-0">
             <SessionsPanel
               agents={dashboard.agents}
-              tasks={dashboard.tasks}
               sessions={filteredSessions}
               filters={filters}
               selectedSessionId={selectedSessionId}
@@ -511,7 +488,6 @@ export default function App() {
           <TabsContent value="transcript" className="mt-0">
             <TranscriptPanel
               agents={dashboard.agents}
-              tasks={dashboard.tasks}
               session={selectedSession}
               messages={messages}
               loading={messagesLoading}
@@ -519,11 +495,9 @@ export default function App() {
               actionState={actionState}
               forkTitle={forkTitle}
               composerAgentId={draftAgentId}
-              composerTaskGroupId={composerTaskGroupId}
               composerMessage={composerMessage}
               onForkTitleChange={setForkTitle}
               onComposerAgentChange={setComposerAgentId}
-              onComposerTaskGroupChange={setComposerTaskGroupId}
               onComposerMessageChange={setComposerMessage}
               onStop={() => {
                 void handleStop();
@@ -537,14 +511,6 @@ export default function App() {
               onSendMessage={() => {
                 void handleSendMessage();
               }}
-            />
-          </TabsContent>
-
-          <TabsContent value="tasks" className="mt-0">
-            <TasksPanel
-              tasks={dashboard.tasks}
-              onCreateTask={handleCreateTask}
-              onArchiveTask={handleArchiveTask}
             />
           </TabsContent>
 

@@ -19,7 +19,7 @@ describe('DaemonStore', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('creates agents, task groups, sessions, and messages', () => {
+  it('creates agents, sessions, and messages', () => {
     const first = store.createAgent({
       name: 'Writer Agent',
       projectPath: '/tmp/writer',
@@ -34,12 +34,8 @@ describe('DaemonStore', () => {
     expect(first.slug).toBe('writer-agent');
     expect(second.slug).toBe('writer-agent-2');
 
-    const taskGroup = store.createTaskGroup({
-      title: 'Launch prep',
-    });
     const session = store.createSession({
       agentId: first.id,
-      taskGroupId: taskGroup.id,
       title: 'Homepage rewrite',
       tags: ['tuning', 'release'],
     });
@@ -59,7 +55,6 @@ describe('DaemonStore', () => {
 
     const sessions = store.listSessions({ agentId: first.id, status: 'all' });
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.taskGroupId).toBe(taskGroup.id);
     expect(sessions[0]?.tags).toEqual(['release', 'tuning']);
 
     const messages = store.getSessionMessages(session.id);

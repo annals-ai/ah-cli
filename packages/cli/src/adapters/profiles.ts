@@ -189,60 +189,10 @@ export const CLAUDE_PROFILE: CliProfile = {
   configDirs: [], // Claude's config dirs are already in SENSITIVE_PATHS
 };
 
-// ── Codex Output Parser ─────────────────────────────────
-
-export class CodexOutputParser implements OutputParser {
-  parseLine(line: string): ParsedEvent | null {
-    if (!line.trim()) return null;
-
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      return null;
-    }
-
-    if (event.type === 'message' && typeof event.message === 'object' && event.message !== null) {
-      const msg = event.message as Record<string, unknown>;
-      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          const b = block as Record<string, unknown>;
-          if (b.type === 'output_text' && typeof b.text === 'string') {
-            return { type: 'chunk', text: b.text };
-          }
-        }
-      }
-    }
-
-    if (event.type === 'completed') {
-      return { type: 'done' };
-    }
-
-    if (event.type === 'error') {
-      return { type: 'error', message: typeof event.message === 'string' ? event.message : 'Codex error' };
-    }
-
-    return null;
-  }
-}
-
-// ── Codex CLI Profile ───────────────────────────────────
-
-export const CODEX_PROFILE: CliProfile = {
-  command: 'codex',
-  displayName: 'Codex CLI',
-  buildArgs: (msg) => ['exec', '--json', msg],
-  createParser: () => new CodexOutputParser(),
-  runtimeWritePaths: [`${HOME_DIR}/.codex`],
-  envPassthroughKeys: ['OPENAI_API_KEY', 'AGENT_BRIDGE_AGENT_ID'],
-  configDirs: [],
-};
-
 // ── Profile registry ────────────────────────────────────
 
 export const PROFILES: Record<string, CliProfile> = {
   claude: CLAUDE_PROFILE,
-  codex: CODEX_PROFILE,
 };
 
 export function getProfile(type: string): CliProfile {

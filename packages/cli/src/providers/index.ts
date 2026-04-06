@@ -7,8 +7,6 @@ import { loadToken } from '../platform/auth.js';
 import { BridgeWSClient } from '../platform/ws-client.js';
 import { log } from '../utils/logger.js';
 import { DaemonBridgeAdapter } from './daemon-bridge-adapter.js';
-import { GenericA2AProvider } from './generic-a2a.js';
-
 const DEFAULT_BRIDGE_URL = 'wss://bridge.agents.hot/ws';
 
 export interface ProviderContext {
@@ -234,7 +232,6 @@ class AgentsHotProvider implements ProviderRuntime {
 
 const PROVIDERS: Record<string, ProviderRuntime> = {
   'agents-hot': new AgentsHotProvider(),
-  'generic-a2a': new GenericA2AProvider(),
 };
 
 export function getProvider(name: string): ProviderRuntime {

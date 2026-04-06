@@ -10,7 +10,7 @@ import {
 import { getDaemonLogPath } from '../daemon/paths.js';
 import type { DaemonRuntime } from '../daemon/runtime.js';
 import type { DaemonStore } from '../daemon/store.js';
-import type { DaemonAgent, ProviderBinding, SessionRecord, TaskGroup } from '../daemon/types.js';
+import type { DaemonAgent, ProviderBinding, SessionRecord } from '../daemon/types.js';
 import type { UiHttpRequestHandler } from './http-server.js';
 
 interface UiApiRoutesOptions {
@@ -106,16 +106,6 @@ function serializeAgent(
   };
 }
 
-function serializeTaskGroup(
-  taskGroup: TaskGroup,
-  sessionCount: number,
-): TaskGroup & { sessionCount: number } {
-  return {
-    ...taskGroup,
-    sessionCount,
-  };
-}
-
 function serializeSession(
   session: SessionRecord,
   agent: DaemonAgent | null,
@@ -155,31 +145,24 @@ async function buildDashboardSnapshot(
   counts: {
     agents: number;
     sessions: number;
-    taskGroups: number;
     providerBindings: number;
   };
   agents: Array<DaemonAgent & { bindings: ProviderBinding[]; sessionCount: number }>;
   providerCatalog: string[];
   sessions: Array<SessionRecord & { agent: DaemonAgent | null }>;
-  tasks: Array<TaskGroup & { sessionCount: number }>;
   providers: Array<ProviderBinding & { agent: DaemonAgent | null }>;
   logs: string[];
   logPath: string;
 }> {
-  const [runtimeSnapshot, agentSessionCounts, taskSessionCounts] = await Promise.all([
+  const [runtimeSnapshot, agentSessionCounts] = await Promise.all([
     options.runtime.getUiStatusSnapshot(),
     Promise.resolve(options.store.getSessionCountsByAgent()),
-    Promise.resolve(options.store.getSessionCountsByTaskGroup()),
   ]);
   const logPath = resolveLogPath(options);
   const agents = options.store.listAgents().map((agent) => serializeAgent(
     agent,
     options.store.listProviderBindings(agent.id),
     agentSessionCounts[agent.id] ?? 0,
-  ));
-  const tasks = options.store.listTaskGroups().map((taskGroup) => serializeTaskGroup(
-    taskGroup,
-    taskSessionCounts[taskGroup.id] ?? 0,
   ));
   const sessions = options.store
     .listSessions({ status: 'all' })
@@ -200,13 +183,11 @@ async function buildDashboardSnapshot(
     counts: {
       agents: agents.length,
       sessions: sessions.length,
-      taskGroups: tasks.length,
       providerBindings: providers.length,
     },
     agents,
     providerCatalog: getProviderCatalog(),
     sessions,
-    tasks,
     providers,
     logs: readLogTail(logPath, lines),
     logPath,
@@ -430,39 +411,9 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           agents: snapshot.agents,
           providerCatalog: snapshot.providerCatalog,
           sessions: snapshot.sessions,
-          tasks: snapshot.tasks,
           providers: snapshot.providers,
           logs: snapshot.logs,
           logPath: snapshot.logPath,
-        });
-        return true;
-      }
-
-      if (method === 'POST' && segments.length === 2 && segments[1] === 'tasks') {
-        const body = await readJsonBody(request);
-        const taskGroup = options.store.createTaskGroup({
-          title: expectNonEmptyString(body.title, 'title'),
-          ownerPrincipal: typeof body.ownerPrincipal === 'string' ? body.ownerPrincipal : 'owner:local',
-          source: typeof body.source === 'string' ? body.source : 'ui',
-          status: typeof body.status === 'string' ? body.status : 'active',
-          metadata: typeof body.metadata === 'object' && body.metadata ? body.metadata as Record<string, unknown> : {},
-        });
-        writeJson(response, 200, {
-          taskGroup: serializeTaskGroup(
-            taskGroup,
-            options.store.getSessionCountsByTaskGroup()[taskGroup.id] ?? 0,
-          ),
-        });
-        return true;
-      }
-
-      if (method === 'POST' && segments.length === 4 && segments[1] === 'tasks' && segments[3] === 'archive') {
-        const taskGroup = options.store.archiveTaskGroup(segments[2]!);
-        writeJson(response, 200, {
-          taskGroup: serializeTaskGroup(
-            taskGroup,
-            options.store.getSessionCountsByTaskGroup()[taskGroup.id] ?? 0,
-          ),
         });
         return true;
       }
@@ -580,7 +531,6 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           counts: {
             agents: options.store.listAgents().length,
             sessions: options.store.listSessions({ status: 'all' }).length,
-            taskGroups: options.store.listTaskGroups().length,
             providerBindings: options.store.listProviderBindings().length,
           },
           runtime,
@@ -619,12 +569,10 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
 
       if (segments.length === 2 && segments[1] === 'sessions') {
         const agentParam = searchParams.get('agent') ?? searchParams.get('agentId');
-        const taskGroupId = searchParams.get('taskGroupId') ?? undefined;
         const status = searchParams.get('status') ?? 'all';
         const agent = agentParam ? options.store.resolveAgentRef(agentParam) : null;
         const items = options.store.listSessions({
           agentId: agent?.id,
-          taskGroupId,
           status: status as SessionRecord['status'] | 'all',
         }).map((session) => serializeSession(session, options.store.getAgentById(session.agentId)));
 
@@ -670,35 +618,6 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           () => readSessionMessagesSnapshot(options, session.id),
           haveSessionMessageSnapshotsChanged,
         );
-        return true;
-      }
-
-      if (segments.length === 2 && segments[1] === 'tasks') {
-        const sessionCounts = options.store.getSessionCountsByTaskGroup();
-        const items = options.store.listTaskGroups().map((taskGroup) => serializeTaskGroup(
-          taskGroup,
-          sessionCounts[taskGroup.id] ?? 0,
-        ));
-        writeJson(response, 200, { items });
-        return true;
-      }
-
-      if (segments.length === 3 && segments[1] === 'tasks') {
-        const taskGroup = options.store.getTaskGroup(segments[2]!);
-        if (!taskGroup) {
-          writeJson(response, 404, { error: 'not_found', message: `Task group not found: ${segments[2]}` });
-          return true;
-        }
-
-        writeJson(response, 200, {
-          taskGroup: serializeTaskGroup(
-            taskGroup,
-            options.store.getSessionCountsByTaskGroup()[taskGroup.id] ?? 0,
-          ),
-          sessions: options.store.listSessions({ taskGroupId: taskGroup.id, status: 'all' }).map((session) => (
-            serializeSession(session, options.store.getAgentById(session.agentId))
-          )),
-        });
         return true;
       }
 

@@ -52,7 +52,6 @@ export interface AgentMutationInput {
 export interface SessionRecord {
   id: string;
   agentId: string;
-  taskGroupId: string | null;
   parentSessionId: string | null;
   origin: string;
   principalType: string;
@@ -83,33 +82,13 @@ export interface SessionMessageStreamSnapshot {
   items: SessionMessage[];
 }
 
-export interface TaskRecord {
-  id: string;
-  title: string;
-  ownerPrincipal: string;
-  source: string;
-  status: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  sessionCount: number;
-}
-
 export interface ProviderRecord extends ProviderBinding {
   agent: AgentRecord | null;
-}
-
-export interface TaskMutationInput {
-  title: string;
-  source?: string;
-  ownerPrincipal?: string;
-  metadata?: Record<string, unknown>;
 }
 
 export interface RuntimeChatInput {
   agentRef?: string;
   sessionId?: string;
-  taskGroupId?: string;
   title?: string;
   tags?: string[];
   message: string;
@@ -125,7 +104,6 @@ export interface DaemonStatusResponse {
   counts: {
     agents: number;
     sessions: number;
-    taskGroups: number;
     providerBindings: number;
   };
   runtime: {
@@ -154,7 +132,6 @@ export interface DashboardData {
   agents: AgentRecord[];
   providerCatalog: string[];
   sessions: SessionRecord[];
-  tasks: TaskRecord[];
   providers: ProviderRecord[];
   logs: string[];
   logPath: string;
@@ -245,16 +222,6 @@ export async function sendLocalChatTurn(
   input: RuntimeChatInput,
 ): Promise<{ session: SessionRecord; messages: SessionMessage[]; result: string }> {
   return postJson<{ session: SessionRecord; messages: SessionMessage[]; result: string }>('/api/runtime/chat', input);
-}
-
-export async function createTaskGroup(input: TaskMutationInput): Promise<TaskRecord> {
-  const response = await postJson<{ taskGroup: TaskRecord }>('/api/tasks', input);
-  return response.taskGroup;
-}
-
-export async function archiveTaskGroup(taskGroupId: string): Promise<TaskRecord> {
-  const response = await postJson<{ taskGroup: TaskRecord }>(`/api/tasks/${taskGroupId}/archive`, {});
-  return response.taskGroup;
 }
 
 export function subscribeLogs(onMessage: (snapshot: LogStreamSnapshot) => void): () => void {

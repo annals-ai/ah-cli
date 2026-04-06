@@ -1,15 +1,10 @@
 import type { Command } from 'commander';
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { join, basename } from 'node:path';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadToken } from '../platform/auth.js';
 import { createClient, PlatformApiError } from '../platform/api-client.js';
 import { resolveAgentId } from '../platform/resolve-agent.js';
-import { FileReceiver, FileUploadSender, type SignalMessage } from '../utils/webrtc-transfer.js';
 import { parseSseChunk } from '../utils/sse-parser.js';
-import { safeUnzip } from '../utils/zip.js';
 import { log } from '../utils/logger.js';
 import { GRAY, RESET, BOLD } from '../utils/table.js';
 import {
@@ -93,296 +88,6 @@ function handleError(err: unknown, opts?: { json?: boolean }): never {
   process.exit(1);
 }
 
-interface FileTransferOfferInfo {
-  transfer_id: string;
-  zip_size: number;
-  zip_sha256: string;
-  file_count: number;
-}
-
-/**
- * Download files via WebRTC P2P from Agent B.
- * Signals are exchanged through Platform → Worker DO → Agent B WS.
- */
-async function webrtcDownload(
-  agentId: string,
-  offer: FileTransferOfferInfo,
-  token: string,
-  outputDir: string,
-  json?: boolean,
-): Promise<void> {
-  if (!json) {
-    log.info(`[WebRTC] Downloading ${offer.file_count} file(s) (${(offer.zip_size / 1024).toFixed(1)} KB)...`);
-  }
-
-  const receiver = new FileReceiver(offer.zip_size, offer.zip_sha256);
-
-  // Signal callback → POST to Platform API, process buffered responses
-  const exchangeSignals = async (signal: SignalMessage) => {
-    try {
-      const res = await fetch(`${DEFAULT_BASE_URL}/api/agents/${agentId}/rtc-signal`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transfer_id: offer.transfer_id,
-          signal_type: signal.signal_type,
-          payload: signal.payload,
-        }),
-      });
-      if (res.ok) {
-        const { signals } = await res.json() as { signals: SignalMessage[] };
-        for (const s of signals) {
-          await receiver.handleSignal(s);
-        }
-      }
-    } catch {
-      // Best-effort signaling
-    }
-  };
-
-  receiver.onSignal(exchangeSignals);
-
-  await receiver.createOffer();
-
-  // Poll for Agent B's buffered signals (answer + ICE candidates)
-  const poll = async () => {
-    for (let i = 0; i < 20; i++) {
-      await sleep(500);
-      try {
-        const res = await fetch(`${DEFAULT_BASE_URL}/api/agents/${agentId}/rtc-signal`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            transfer_id: offer.transfer_id,
-            signal_type: 'poll',
-            payload: '',
-          }),
-        });
-        if (res.ok) {
-          const { signals } = await res.json() as { signals: SignalMessage[] };
-          for (const s of signals) {
-            await receiver.handleSignal(s);
-          }
-        }
-      } catch {
-        // Best-effort polling
-      }
-    }
-  };
-
-  try {
-    const [zipBuffer] = await Promise.all([
-      receiver.waitForCompletion(30_000),
-      poll(),
-    ]);
-
-    // Extract ZIP
-    mkdirSync(outputDir, { recursive: true });
-    const zipPath = join(outputDir, '.transfer.zip');
-    writeFileSync(zipPath, zipBuffer);
-
-    try {
-      safeUnzip(zipPath, outputDir);
-      try { execSync(`rm "${zipPath}"`); } catch {}
-    } catch (unzipErr) {
-      log.warn(`Failed to extract ZIP: ${(unzipErr as Error).message}. Saved to: ${zipPath}`);
-      return;
-    }
-
-    if (json) {
-      console.log(JSON.stringify({
-        type: 'files_downloaded',
-        file_count: offer.file_count,
-        output_dir: outputDir,
-        zip_size: zipBuffer.length,
-        sha256_verified: true,
-      }));
-    } else {
-      log.success(`[WebRTC] ${offer.file_count} file(s) extracted to ${outputDir}`);
-    }
-  } catch (err) {
-    const msg = (err as Error).message;
-    if (json) {
-      console.log(JSON.stringify({ type: 'file_transfer_failed', error: msg }));
-    } else {
-      log.warn(`[WebRTC] File transfer failed: ${msg}`);
-    }
-  } finally {
-    receiver.close();
-  }
-}
-
-/**
- * Prepare a file for upload: read → ZIP → SHA-256 → FileTransferOffer
- */
-function prepareFileForUpload(filePath: string): {
-  offer: FileTransferOfferInfo;
-  zipBuffer: Buffer;
-} {
-  const fileName = basename(filePath);
-  const tempDir = join(tmpdir(), `upload-${Date.now()}`);
-  mkdirSync(tempDir, { recursive: true });
-
-  // Copy file to temp dir and ZIP it
-  const tempFile = join(tempDir, fileName);
-  copyFileSync(filePath, tempFile);
-
-  const zipPath = join(tempDir, 'upload.zip');
-  execSync(`cd "${tempDir}" && zip -q "${zipPath}" "${fileName}"`);
-  const zipBuffer = readFileSync(zipPath);
-
-  // Cleanup temp
-  try { execSync(`rm -rf "${tempDir}"`); } catch {}
-
-  const zipSha256 = createHash('sha256').update(zipBuffer).digest('hex');
-  const transferId = randomUUID();
-
-  return {
-    offer: {
-      transfer_id: transferId,
-      zip_size: zipBuffer.length,
-      zip_sha256: zipSha256,
-      file_count: 1,
-    },
-    zipBuffer: Buffer.from(zipBuffer),
-  };
-}
-
-/**
- * Send prepare-upload signal to Agent via rtc-signal endpoint.
- * This registers a FileUploadReceiver on the Agent BEFORE any message is sent.
- */
-async function sendPrepareUpload(
-  agentId: string,
-  offer: FileTransferOfferInfo,
-  token: string,
-): Promise<void> {
-  const res = await fetch(`${DEFAULT_BASE_URL}/api/agents/${agentId}/rtc-signal`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      transfer_id: offer.transfer_id,
-      signal_type: 'prepare-upload',
-      payload: JSON.stringify(offer),
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`prepare-upload signal failed: HTTP ${res.status}`);
-  }
-}
-
-/**
- * Upload files via WebRTC P2P to Agent.
- * Caller creates offer + DataChannel, sends ZIP chunks.
- */
-async function webrtcUpload(
-  agentId: string,
-  offer: FileTransferOfferInfo,
-  zipBuffer: Buffer,
-  token: string,
-  json?: boolean,
-): Promise<void> {
-  if (!json) {
-    log.info(`[WebRTC] Uploading file (${(offer.zip_size / 1024).toFixed(1)} KB)...`);
-  }
-
-  const sender = new FileUploadSender(offer.transfer_id, zipBuffer);
-
-  const exchangeSignals = async (signal: SignalMessage) => {
-    try {
-      const res = await fetch(`${DEFAULT_BASE_URL}/api/agents/${agentId}/rtc-signal`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transfer_id: offer.transfer_id,
-          signal_type: signal.signal_type,
-          payload: signal.payload,
-        }),
-      });
-      if (res.ok) {
-        const { signals } = await res.json() as { signals: SignalMessage[] };
-        for (const s of signals) {
-          await sender.handleSignal(s);
-        }
-      }
-    } catch {
-      // Best-effort signaling
-    }
-  };
-
-  sender.onSignal(exchangeSignals);
-
-  await sender.createOffer();
-
-  // Poll for Agent's buffered signals (answer + ICE candidates)
-  const poll = async () => {
-    for (let i = 0; i < 20; i++) {
-      await sleep(500);
-      try {
-        const res = await fetch(`${DEFAULT_BASE_URL}/api/agents/${agentId}/rtc-signal`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            transfer_id: offer.transfer_id,
-            signal_type: 'poll',
-            payload: '',
-          }),
-        });
-        if (res.ok) {
-          const { signals } = await res.json() as { signals: SignalMessage[] };
-          for (const s of signals) {
-            await sender.handleSignal(s);
-          }
-        }
-      } catch {
-        // Best-effort polling
-      }
-    }
-  };
-
-  try {
-    await Promise.all([
-      sender.waitForCompletion(30_000),
-      poll(),
-    ]);
-
-    if (json) {
-      console.log(JSON.stringify({
-        type: 'files_uploaded',
-        file_count: offer.file_count,
-        zip_size: offer.zip_size,
-        sha256: offer.zip_sha256,
-      }));
-    } else {
-      log.success(`[WebRTC] File uploaded successfully`);
-    }
-  } catch (err) {
-    const msg = (err as Error).message;
-    if (json) {
-      console.log(JSON.stringify({ type: 'file_upload_failed', error: msg }));
-    } else {
-      log.warn(`[WebRTC] File upload failed: ${msg}`);
-    }
-  } finally {
-    sender.close();
-  }
-}
-
 /**
  * Async call: POST mode=async → poll for result
  */
@@ -395,7 +100,6 @@ async function asyncCall(opts: {
   json?: boolean;
   outputFile?: string;
   signal?: AbortSignal;
-  withFiles?: boolean;
 }): Promise<{ callId: string; sessionKey?: string }> {
   const selfAgentId = process.env.AGENT_BRIDGE_AGENT_ID;
 
@@ -409,7 +113,6 @@ async function asyncCall(opts: {
     body: JSON.stringify({
       task_description: opts.taskDescription,
       mode: 'async',
-      ...(opts.withFiles ? { with_files: true } : {}),
     }),
     signal: opts.signal,
   });
@@ -484,7 +187,6 @@ async function asyncCall(opts: {
         process.stderr.write(` done\n`);
       }
       const result = task.result || '';
-      const offer = (task as { file_transfer_offer?: FileTransferOfferInfo }).file_transfer_offer;
       if (opts.json) {
         console.log(JSON.stringify({
           call_id,
@@ -493,7 +195,6 @@ async function asyncCall(opts: {
           status: 'completed',
           result,
           ...(task.attachments?.length ? { attachments: task.attachments } : {}),
-          ...(offer ? { file_transfer_offer: offer } : {}),
           rate_hint: `POST /api/agents/${opts.id}/rate  body: { call_id: "${call_id}", rating: 1-5 }`,
         }));
       } else {
@@ -510,11 +211,6 @@ async function asyncCall(opts: {
       if (opts.outputFile && result) {
         writeFileSync(opts.outputFile, result);
         if (!opts.json) log.info(`Saved to ${opts.outputFile}`);
-      }
-      // Download files if offer present and --with-files was specified
-      if (offer && opts.withFiles) {
-        const outputDir = opts.outputFile ? join(opts.outputFile, '..', 'files') : join(process.cwd(), 'agent-output');
-        await webrtcDownload(opts.id, offer, opts.token, outputDir, opts.json);
       }
       if (!opts.json) {
         log.info(`${GRAY}Rate this call: ah rate ${call_id} <1-5> --agent ${opts.id}${RESET}`);
@@ -554,7 +250,6 @@ async function streamCall(opts: {
   json?: boolean;
   outputFile?: string;
   signal?: AbortSignal;
-  withFiles?: boolean;
 }): Promise<{ callId: string; sessionKey?: string }> {
   const selfAgentId = process.env.AGENT_BRIDGE_AGENT_ID;
 
@@ -568,7 +263,6 @@ async function streamCall(opts: {
     },
     body: JSON.stringify({
       task_description: opts.taskDescription,
-      ...(opts.withFiles ? { with_files: true } : {}),
     }),
     signal: opts.signal,
   });
@@ -626,7 +320,6 @@ async function streamCall(opts: {
   let inThinkingBlock = false;
   let callId = res.headers.get('X-Call-Id') || '';
   let sessionKey = res.headers.get('X-Session-Key') || '';
-  let fileOffer: FileTransferOfferInfo | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -670,9 +363,6 @@ async function streamCall(opts: {
                 log.info(`  ${GRAY}File:${RESET} ${att.name}  ${GRAY}${att.url}${RESET}`);
               }
             }
-            if (event.file_transfer_offer) {
-              fileOffer = event.file_transfer_offer as FileTransferOfferInfo;
-            }
           } else if (event.type === 'error') {
             process.stderr.write(`\nError: ${event.message}\n`);
           }
@@ -699,9 +389,6 @@ async function streamCall(opts: {
             }
           }
         }
-        if (event.type === 'done' && event.file_transfer_offer) {
-          fileOffer = event.file_transfer_offer as FileTransferOfferInfo;
-        }
       } catch { /* ignore */ }
     }
   }
@@ -709,13 +396,6 @@ async function streamCall(opts: {
   if (opts.outputFile && outputBuffer) {
     writeFileSync(opts.outputFile, outputBuffer);
     if (!opts.json) log.info(`Saved to ${opts.outputFile}`);
-  }
-
-  // Download files if offer present and --with-files was specified
-  if (fileOffer && opts.withFiles) {
-    console.log('');
-    const outputDir = opts.outputFile ? join(opts.outputFile, '..', 'files') : join(process.cwd(), 'agent-output');
-    await webrtcDownload(opts.id, fileOffer, opts.token, outputDir, opts.json);
   }
 
   if (!opts.json) {
@@ -742,10 +422,8 @@ export function registerCallCommand(program: Command): void {
     .option('--fork-from <sessionId>', 'Fork a local session before executing')
     .option('--tag <tag...>', 'Add tag(s) to a new local session')
     .option('--input-file <path>', 'Read file and append to task description')
-    .option('--upload-file <path>', 'Upload file to agent via WebRTC P2P')
     .option('--output-file <path>', 'Save response text to file')
     .option('--stream', 'Use SSE streaming instead of async polling')
-    .option('--with-files', 'Request file transfer via WebRTC after task completion')
     .option('--json', 'Output JSONL events')
     .option('--timeout <seconds>', 'Timeout in seconds', '300')
     .option('--rate <rating>', 'Rate the agent after call (1-5)', parseInt)
@@ -756,19 +434,13 @@ export function registerCallCommand(program: Command): void {
       forkFrom?: string;
       tag?: string[];
       inputFile?: string;
-      uploadFile?: string;
       outputFile?: string;
       stream?: boolean;
-      withFiles?: boolean;
       json?: boolean;
       timeout?: string;
       rate?: number;
     }) => {
       if (resolveLocalAgentRef(agentInput)) {
-        if (opts.uploadFile) {
-          log.error('Local daemon call does not support --upload-file yet.');
-          process.exit(1);
-        }
         if (opts.rate) {
           log.warn('Ignoring --rate for local daemon calls.');
         }
@@ -784,7 +456,6 @@ export function registerCallCommand(program: Command): void {
           tags: opts.session ? undefined : parseTagFlags(opts.tag),
           message: taskDescription,
           json: opts.json,
-          withFiles: opts.withFiles,
         });
         if (opts.outputFile) {
           saveOutputFile(opts.outputFile, result.result);
@@ -809,29 +480,9 @@ export function registerCallCommand(program: Command): void {
           taskDescription = `${taskDescription}\n\n---\n\n${content}`;
         }
 
-        // Prepare file upload if --upload-file specified
-        let uploadOffer: FileTransferOfferInfo | undefined;
-        let uploadZipBuffer: Buffer | undefined;
-        if (opts.uploadFile) {
-          if (!existsSync(opts.uploadFile)) {
-            log.error(`File not found: ${opts.uploadFile}`);
-            process.exit(1);
-          }
-          const prepared = prepareFileForUpload(opts.uploadFile);
-          uploadOffer = prepared.offer;
-          uploadZipBuffer = prepared.zipBuffer;
-        }
-
         const timeoutMs = parseInt(opts.timeout || '300', 10) * 1000;
         const abortController = new AbortController();
         const timer = setTimeout(() => abortController.abort(), timeoutMs);
-
-        // Upload file FIRST via prepare-upload signal + WebRTC P2P
-        if (uploadOffer && uploadZipBuffer) {
-          await sendPrepareUpload(id, uploadOffer, token);
-          await sleep(500); // Let Agent register the upload receiver
-          await webrtcUpload(id, uploadOffer, uploadZipBuffer, token, opts.json);
-        }
 
         const callOpts = {
           id,
@@ -842,7 +493,6 @@ export function registerCallCommand(program: Command): void {
           json: opts.json,
           outputFile: opts.outputFile,
           signal: abortController.signal,
-          withFiles: opts.withFiles,
         };
 
         let result: { callId: string; sessionKey?: string };

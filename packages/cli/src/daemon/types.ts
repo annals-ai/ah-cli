@@ -50,23 +50,11 @@ export interface ProviderBinding {
   updatedAt: string;
 }
 
-export interface TaskGroup {
-  id: string;
-  title: string;
-  ownerPrincipal: string;
-  source: string;
-  status: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface SessionRecord {
   id: string;
   agentId: string;
   agentName?: string;
   agentSlug?: string;
-  taskGroupId: string | null;
   parentSessionId: string | null;
   origin: string;
   principalType: string;
@@ -133,18 +121,9 @@ export interface UpdateAgentInput {
   visibility?: AgentVisibility;
 }
 
-export interface CreateTaskGroupInput {
-  title: string;
-  ownerPrincipal?: string;
-  source?: string;
-  status?: string;
-  metadata?: Record<string, unknown>;
-}
-
 export interface CreateSessionInput {
   id?: string;
   agentId: string;
-  taskGroupId?: string | null;
   parentSessionId?: string | null;
   origin?: string;
   principalType?: string;
@@ -157,7 +136,6 @@ export interface CreateSessionInput {
 }
 
 export interface UpdateSessionInput {
-  taskGroupId?: string | null;
   parentSessionId?: string | null;
   status?: SessionStatus;
   claudeResumeId?: string | null;
@@ -177,14 +155,12 @@ export interface AppendMessageInput {
 
 export interface ForkSessionInput {
   sourceSessionId: string;
-  taskGroupId?: string | null;
   title?: string | null;
   tags?: string[];
 }
 
 export interface SessionQuery {
   agentId?: string;
-  taskGroupId?: string;
   status?: SessionStatus | 'all';
   tag?: string;
   search?: string;
@@ -202,7 +178,6 @@ export interface ExecuteSessionInput {
   forkFromSessionId?: string;
   message: string;
   mode: 'chat' | 'call';
-  taskGroupId?: string | null;
   title?: string | null;
   tags?: string[];
   origin?: string;
@@ -236,8 +211,6 @@ export type RuntimeStreamEvent =
   | { type: 'tool'; sessionId: string; event: { kind: string; tool_name: string; tool_call_id: string; delta: string } }
   | { type: 'done'; sessionId: string; result: string; claudeResumeId: string | null }
   | { type: 'error'; sessionId?: string; message: string }
-  | { type: 'fan-out-progress'; agentSlug: string; status: 'started' | 'chunk' | 'done' | 'error'; delta?: string; error?: string }
-  | { type: 'fan-out-verdict'; delta: string }
   | { type: 'parallel-progress'; index: number; status: 'started' | 'completed' | 'error'; sessionId?: string; error?: string }
   | { type: 'parallel-chunk'; index: number; delta: string };
 
@@ -249,23 +222,3 @@ export interface ProviderExposureResult {
   lastSyncedAt?: string | null;
 }
 
-export interface FanOutInput {
-  task: string;
-  agentRefs: string[];
-  synthesizerRef?: string;
-  tags?: string[];
-}
-
-export interface FanOutAgentResult {
-  agentRef: string;
-  agentSlug: string;
-  sessionId: string;
-  result: string;
-  error?: string;
-}
-
-export interface FanOutResult {
-  taskGroupId: string;
-  results: FanOutAgentResult[];
-  verdict?: string;
-}
