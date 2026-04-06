@@ -635,6 +635,28 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         return true;
       }
 
+      if (segments.length === 3 && segments[1] === 'providers' && segments[2] === 'status') {
+        const bindings = options.store.listProviderBindings();
+        const agents = bindings.map((b) => {
+          const agent = options.store.getAgentById(b.agentId);
+          return {
+            slug: agent?.slug ?? b.agentId,
+            name: agent?.name ?? 'unknown',
+            status: b.status,
+            remoteAgentId: b.remoteAgentId,
+            remoteSlug: b.remoteSlug,
+            lastSyncedAt: b.lastSyncedAt,
+          };
+        });
+        writeJson(response, 200, {
+          provider: 'agents-hot',
+          agents,
+          onlineCount: agents.filter((a) => a.status === 'online').length,
+          totalCount: agents.length,
+        });
+        return true;
+      }
+
       if (method === 'GET' && segments.length === 3 && segments[1] === 'logs' && segments[2] === 'stream') {
         streamSnapshot(
           { request, response },

@@ -532,6 +532,69 @@ export class AgentNetworkDaemonServer {
         return unexposeManagedAgent({ store: this.store, runtime: this.runtime }, ref, providerName);
       }
 
+      case 'provider.status': {
+        const bindings = this.store.listProviderBindings();
+        const agents = bindings.map((b) => {
+          const agent = this.store.getAgentById(b.agentId);
+          return {
+            slug: agent?.slug ?? b.agentId,
+            name: agent?.name ?? 'unknown',
+            status: b.status,
+            remoteAgentId: b.remoteAgentId,
+            remoteSlug: b.remoteSlug,
+            lastSyncedAt: b.lastSyncedAt,
+          };
+        });
+        const hasToken = !!(await import('../platform/auth.js')).loadToken();
+        let network: { id: string | null; name: string | null; memberCount: number; role: string | null } | null = null;
+        if (hasToken) {
+          try {
+            const client = (await import('../platform/api-client.js')).createClient();
+            network = await client.get<{ id: string | null; name: string | null; memberCount: number; role: string | null }>('/api/developer/network');
+          } catch {
+            // Platform may not support network endpoint yet
+          }
+        }
+        return { provider: 'agents-hot', authenticated: hasToken, agents, network };
+      }
+
+      case 'provider.join': {
+        const inviteCode = expectString(request.params?.inviteCode, 'inviteCode');
+        const client = (await import('../platform/api-client.js')).createClient();
+        return client.post<{ network: { id: string; name: string }; role: string }>(
+          '/api/developer/network/join',
+          { inviteCode },
+        );
+      }
+
+      case 'provider.invite': {
+        const client = (await import('../platform/api-client.js')).createClient();
+        return client.post<{ inviteCode: string; expiresAt: string; sentTo: string | null }>(
+          '/api/developer/network/invite',
+          {
+            email: typeof request.params?.email === 'string' ? request.params.email : undefined,
+            role: typeof request.params?.role === 'string' ? request.params.role : 'member',
+            expires: typeof request.params?.expires === 'string' ? request.params.expires : '7d',
+          },
+        );
+      }
+
+      case 'provider.members': {
+        const client = (await import('../platform/api-client.js')).createClient();
+        return client.get<{ members: Array<{ id: string; name: string | null; email: string | null; role: string; agentCount: number; joinedAt: string; lastActiveAt: string | null }> }>(
+          '/api/developer/network/members',
+        );
+      }
+
+      case 'provider.kick': {
+        const memberId = expectString(request.params?.memberId, 'memberId');
+        const client = (await import('../platform/api-client.js')).createClient();
+        return client.post<{ ok: boolean; memberId: string }>(
+          '/api/developer/network/kick',
+          { memberId },
+        );
+      }
+
       case 'session.list': {
         let agentId: string | undefined;
         if (typeof request.params?.agentRef === 'string' && request.params.agentRef.trim()) {

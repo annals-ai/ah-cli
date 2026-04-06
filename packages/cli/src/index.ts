@@ -11,6 +11,7 @@ import { registerSessionCommand } from './commands/session.js';
 import { registerSessionsShortcutCommand } from './commands/sessions-shortcut.js';
 import { registerPsShortcutCommand } from './commands/ps-shortcut.js';
 import { registerUiCommand } from './commands/ui.js';
+import { registerProviderCommand } from './commands/provider.js';
 import { registerConfigCommand } from './commands/config.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { maybeAutoUpgradeOnStartup } from './utils/auto-updater.js';
@@ -51,6 +52,7 @@ registerSessionsShortcutCommand(program);
 registerPsShortcutCommand(program);
 registerChatCommand(program);
 registerCallCommand(program);
+registerProviderCommand(program);
 registerConfigCommand(program);
 registerDoctorCommand(program);
 

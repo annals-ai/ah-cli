@@ -386,4 +386,41 @@ describe('AgentNetworkDaemonServer UI API', () => {
     expect(removed.ok).toBe(true);
     expect(agents.items.find((agent) => agent.id === removed.agentId)).toBeUndefined();
   });
+
+  it('returns provider status through the ui api', async () => {
+    const store = new DaemonStore(dbPath);
+    const agent = store.createAgent({
+      name: 'Provider Status Agent',
+      projectPath: '/tmp/provider-status-agent',
+      capabilities: ['testing'],
+    });
+    store.upsertProviderBinding({
+      agentId: agent.id,
+      provider: 'agents-hot',
+      remoteAgentId: 'remote-123',
+      remoteSlug: 'provider-status-agent',
+      status: 'online',
+      config: {},
+      lastSyncedAt: new Date().toISOString(),
+    });
+    store.close();
+
+    server = new AgentNetworkDaemonServer({ dbPath, uiPort: 0 });
+    const address = await server.listenForTest();
+
+    const status = await fetchJson<{
+      provider: string;
+      agents: Array<{ slug: string; status: string; remoteSlug: string | null }>;
+      onlineCount: number;
+      totalCount: number;
+    }>(`${address.uiBaseUrl}/api/providers/status`);
+
+    expect(status.provider).toBe('agents-hot');
+    expect(status.totalCount).toBe(1);
+    expect(status.agents[0]?.slug).toBe(agent.slug);
+    expect(status.agents[0]?.remoteSlug).toBe('provider-status-agent');
+    // Binding may transition from 'online' to 'error' during server startup
+    // because no real WebSocket connection exists in the test environment
+    expect(['online', 'error']).toContain(status.agents[0]?.status);
+  });
 });
