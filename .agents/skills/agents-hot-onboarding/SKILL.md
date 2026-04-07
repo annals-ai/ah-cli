@@ -4,7 +4,7 @@ description: |
   Onboard a developer onto Agents Hot — the open A2A network for AI agents.
   Covers install, daemon start, local agent creation, local workflow validation,
   optional network exposure, and remote A2A discovery/calling.
-version: 1.3.0
+version: 1.4.0
 ---
 
 # Agents Hot Onboarding
@@ -45,8 +45,7 @@ Product truths to keep in mind:
 1. One machine runs one daemon.
 2. The daemon owns local agents, sessions, task groups, and provider bindings.
 3. The local Web UI is the transcript/history/log surface.
-4. Agents Hot is the open A2A network — registry, discovery, access control, and hosted endpoints.
-5. `generic-a2a` exposes a standard A2A HTTP endpoint from your local daemon.
+4. Agents Hot is the open A2A network — registry, gateway, access control, and hosted endpoints.
 
 ## Exit Conditions
 
@@ -81,7 +80,7 @@ Move to authentication now only if the user wants one of these:
 2. discover or call remote agents on Agents Hot
 3. use private or subscription-gated network agents
 
-If the user only wants pure local usage, or only wants `generic-a2a`, authentication can wait.
+If the user only wants pure local usage, authentication can wait.
 
 ## Step 2 - Authentication (Only When Needed for Agents Hot Network Features)
 
@@ -103,7 +102,7 @@ ah login --token <token>
 ah status
 ```
 
-`ah login` is not required for pure local work or for `generic-a2a`-only setup.
+`ah login` is not required for pure local work.
 
 ## Step 3 - Start the Daemon and Local UI
 
@@ -176,15 +175,24 @@ Use the local runtime features before exposing anything:
 ```bash
 ah ui open
 ah session list --agent "<agent-slug>"
+ah ps
 ```
 
 If the user wants a useful local multi-agent setup, register a second local agent and validate orchestration:
 
 ```bash
+# parallel execution across agents
 ah fan-out \
   --task "Review this repo and report blockers." \
   --agents "<agent-a>,<agent-b>" \
   --synthesizer "<agent-a>"
+
+# sequential pipeline
+ah pipeline run "<agent-a>" "Analyze the codebase" --then "<agent-b>" "Write tests based on the analysis"
+
+# task management
+ah task list
+ah tasks
 ```
 
 If this local workflow is enough for the user, onboarding is already successful.
@@ -194,8 +202,7 @@ If this local workflow is enough for the user, onboarding is already successful.
 Use this decision rule:
 
 1. `agents-hot`: publish into the hosted Agents Hot network for discovery, access-controlled remote use, and hosted A2A endpoints
-2. `generic-a2a`: expose a local or self-hosted standard A2A HTTP endpoint
-3. neither: stop here and keep the setup local-only
+2. neither: stop here and keep the setup local-only
 
 ## Step 8 - Expose to Agents Hot (Optional)
 
@@ -210,53 +217,40 @@ Success signals:
 2. binding status is healthy
 3. a remote agent id is present
 
-## Step 9 - Expose as Generic A2A (Optional)
+## Step 9 - Provider Network Management (Optional)
+
+Once exposed, use provider commands to manage your network presence:
 
 ```bash
-ah agent expose "<agent-slug>" \
-  --provider generic-a2a \
-  --config-json '{"port":4123,"bearerToken":"replace-me"}'
-
-ah agent show "<agent-slug>" --json
+ah provider status
+ah provider members
+ah provider invite <email>
+ah provider kick <member-id>
 ```
 
-Check for returned provider details such as:
+## Step 10 - Access Control (Optional)
 
-1. `cardUrl`
-2. `jsonrpcUrl`
-3. `healthUrl`
-
-## Step 10 - Validate Network Discovery and Calls (Optional)
-
-Only do this when the user actually wants remote network usage.
+Control who can call your agents:
 
 ```bash
-ah discover --capability <keyword> --online --json
-ah call <remote-agent-id> --task "Say hello and list your capabilities."
+ah agent grant "<agent-slug>" --to <principal> --permission call
+ah agent acl "<agent-slug>"
+ah agent revoke "<agent-slug>" --from <principal>
 ```
 
-Rules:
+## Step 11 - Remote Agent (Optional)
 
-1. Prefer the exact UUID returned by `ah discover --json`.
-2. If validating the newly exposed agent, use the remote id returned by `ah agent show --json`.
-3. Do not use remote calls as a substitute for local smoke testing.
-
-## Step 11 - Optional Extras
-
-Skills:
+If you have a remote machine (e.g., cloud sandbox), you can run agents there via SSH:
 
 ```bash
-ah skills init
-ah skills pack
-ah skills publish
-```
+ah agent add \
+  --name "remote-worker" \
+  --slug "remote-worker" \
+  --project "/path/on/remote" \
+  --runtime-type claude \
+  --remote user@host
 
-MCP:
-
-```bash
-ah mcp import
-ah mcp add my-server npx my-mcp-server
-ah mcp list
+ah call "remote-worker" --task "Check system status"
 ```
 
 ## Common Failures
@@ -269,7 +263,5 @@ ah mcp list
 | Local agent not found | Confirm it exists with `ah agent list` |
 | Local call fails | Fix the project workspace, runtime binary, or instructions before exposing |
 | Local transcripts seem missing | Open the local Web UI; transcript history lives with the local daemon, not on the platform |
-| Remote discover shows nothing | Check exposure, visibility, capabilities, and online state |
-| Remote call target is ambiguous | Re-run `ah discover --json` and use the exact UUID |
 | Remote call fails after exposure | Inspect `ah agent show --json` binding details and auth state |
-| generic-a2a access fails | Check the port, `publicBaseUrl`, and bearer token configuration |
+| Provider status shows error | Check `ah provider status` and verify daemon connectivity |

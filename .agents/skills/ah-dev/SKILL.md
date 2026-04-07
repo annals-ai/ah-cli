@@ -115,9 +115,9 @@ When the skill is being used as a development manual, these are the main live ar
 | Area | Main commands or code surface |
 | --- | --- |
 | Local runtime | `ah daemon`, `ah agent`, `ah chat`, `ah call`, `ah session`, `ah task` |
-| Network and exposure | `ah discover`, `ah subscribe`, `ah agent expose`, provider bindings |
-| Skill lifecycle | `ah skills init`, `ah skills pack`, `ah skills publish`, `ah skills install` |
-| Tool wiring | `ah mcp import`, `ah mcp add`, `ah mcp list`, `ah mcp remove` |
+| Network and exposure | `ah agent expose/unexpose`, `ah provider status/join/invite/members/kick` |
+| Access control | `ah agent grant`, `ah agent revoke`, `ah agent acl` |
+| Orchestration | `ah fan-out`, `ah pipeline run`, `ah tasks` |
 | Diagnostics | `ah status`, `ah doctor`, `ah config`, `ah daemon logs` |
 
 ## Integration Checks

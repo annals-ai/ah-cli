@@ -32,19 +32,19 @@ ah-cli/
 
 主命令族以 `packages/cli/src/index.ts` 为准：
 
-- `login`, `status`
-- `daemon`, `ui`
-- `agent`, `agents`
-- `task`, `tasks`
-- `session`, `sessions`, `ps`
-- `chat`, `call`, `discover`, `fan-out`
-- `skills`
-- `mcp`
-- `config`
-- `doctor`
-- `pipeline`
-- `profile`
-- `subscribe`, `unsubscribe`, `subscriptions`
+- `login`, `status`, `doctor`
+- `daemon start|stop|status|logs`
+- `ui serve|open`
+- `agent add|list|update|remove|show|clone|quick|ping|expose|unexpose|grant|revoke|acl`
+- `session list|get|delete|archive|clean`
+- `sessions`, `ps`
+- `task create|list|show|archive|update`
+- `tasks`
+- `chat`, `call`
+- `fan-out`
+- `pipeline run`
+- `provider status|join|invite|members|kick`
+- `config`, `help`
 
 不要再往文档里写旧的：
 
@@ -53,6 +53,11 @@ ah-cli/
 - `ah install`
 - `ah uninstall`
 - `ah daemon ui`
+- `ah discover`
+- `ah subscribe` / `ah unsubscribe` / `ah subscriptions`
+- `ah skills`
+- `ah mcp`
+- `ah profile`
 
 本地 UI 的当前入口是：
 
@@ -69,8 +74,9 @@ ah-cli/
 - Agent 注册与管理
 - Session / Task Group 生命周期
 - 本地 chat / call
-- provider expose / unexpose
-- skills / MCP / config / doctor / pipeline
+- provider expose / unexpose / status / join / invite / members / kick
+- agent access control (grant / revoke / acl)
+- config / doctor / pipeline
 
 ### 4.2 Local Web UI
 
