@@ -6,6 +6,7 @@ import { requestDaemon } from '../daemon/client.js';
 import { getDaemonLogPath } from '../daemon/paths.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, RED, RESET, YELLOW, BLUE, renderTable, type Column } from '../utils/table.js';
+import { truncate, formatRelativeTime, formatRelativeTimeLong, SESSION_STATUS_CONFIG } from '../utils/formatting.js';
 import { parseTagFlags, runLocalChat } from './local-runtime.js';
 
 /**
@@ -161,39 +162,6 @@ export function registerSessionCommand(program: Command): void {
         return;
       }
 
-      // Define status color mapping with symbols
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        running: { color: GREEN, symbol: '●' },
-        active: { color: GREEN, symbol: '●' },
-        idle: { color: GRAY, symbol: '○' },
-        paused: { color: YELLOW, symbol: '◐' },
-        failed: { color: RED, symbol: '✗' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        queued: { color: GRAY, symbol: '○' },
-      };
-
-      // Truncate helper
-      const truncate = (str: string, maxLen: number): string => {
-        if (!str) return '';
-        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-      };
-
-      // Format relative time
-      const formatRelativeTime = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        return `${diffDays}d`;
-      };
-
       // Define table columns
       const columns: Column[] = [
         { key: 'id', label: 'ID', width: 9 },
@@ -205,7 +173,7 @@ export function registerSessionCommand(program: Command): void {
 
       // Format rows
       const rows = filteredSessions.map((s) => {
-        const config = statusConfig[s.status] || { color: GRAY, symbol: '○' };
+        const config = SESSION_STATUS_CONFIG[s.status] || { color: GRAY, symbol: '○' };
         return {
           id: s.id.slice(0, 8),
           agent: s.agentName || s.agentId?.slice(0, 8) || '-',
@@ -224,7 +192,7 @@ export function registerSessionCommand(program: Command): void {
       }
       const summary = Object.entries(statusCounts)
         .map(([status, count]) => {
-          const config = statusConfig[status] || { color: GRAY, symbol: '○' };
+          const config = SESSION_STATUS_CONFIG[status] || { color: GRAY, symbol: '○' };
           return `${config.color}${config.symbol}${RESET} ${count} ${status}`;
         })
         .join('  ');
@@ -268,33 +236,7 @@ export function registerSessionCommand(program: Command): void {
 
       // Human-readable output
       const session = result.session;
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        running: { color: GREEN, symbol: '●' },
-        active: { color: GREEN, symbol: '●' },
-        idle: { color: GRAY, symbol: '○' },
-        paused: { color: YELLOW, symbol: '◐' },
-        failed: { color: RED, symbol: '✗' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        queued: { color: GRAY, symbol: '○' },
-      };
-      const config = statusConfig[session.status] || { color: GRAY, symbol: '○' };
-
-      // Format relative time
-      const formatRelativeTime = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins} minutes ago`;
-        if (diffHours < 24) return `${diffHours} hours ago`;
-        if (diffDays === 1) return 'yesterday';
-        return `${diffDays} days ago`;
-      };
+      const config = SESSION_STATUS_CONFIG[session.status] || { color: GRAY, symbol: '○' };
 
       // Header
       console.log(`\n${BOLD}Session Details${RESET}\n`);
@@ -305,9 +247,9 @@ export function registerSessionCommand(program: Command): void {
       console.log(`  ${GRAY}Status:${RESET}  ${config.color}${config.symbol} ${session.status}${RESET}`);
       console.log(`  ${GRAY}Agent:${RESET}   ${session.agentName || session.agentId?.slice(0, 12) || '-'}`);
       if (session.createdAt) {
-        console.log(`  ${GRAY}Created:${RESET} ${formatRelativeTime(session.createdAt)}`);
+        console.log(`  ${GRAY}Created:${RESET} ${formatRelativeTimeLong(session.createdAt)}`);
       }
-      console.log(`  ${GRAY}Active:${RESET}  ${formatRelativeTime(session.lastActiveAt)}`);
+      console.log(`  ${GRAY}Active:${RESET}  ${formatRelativeTimeLong(session.lastActiveAt)}`);
       if (session.tags && session.tags.length > 0) {
         console.log(`  ${GRAY}Tags:${RESET}    ${session.tags.join(', ')}`);
       }
@@ -1613,16 +1555,6 @@ export function registerSessionCommand(program: Command): void {
 
       // Status breakdown
       const statusCounts: Record<string, number> = {};
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        running: { color: GREEN, symbol: '●' },
-        active: { color: GREEN, symbol: '●' },
-        idle: { color: GRAY, symbol: '○' },
-        paused: { color: YELLOW, symbol: '◐' },
-        failed: { color: RED, symbol: '✗' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        queued: { color: GRAY, symbol: '○' },
-      };
 
       for (const s of sessions) {
         statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
@@ -1632,7 +1564,7 @@ export function registerSessionCommand(program: Command): void {
       const statusOrder = ['active', 'running', 'idle', 'paused', 'completed', 'failed', 'archived'];
       for (const status of statusOrder) {
         if (statusCounts[status]) {
-          const config = statusConfig[status] || { color: GRAY, symbol: '○' };
+          const config = SESSION_STATUS_CONFIG[status] || { color: GRAY, symbol: '○' };
           console.log(`    ${config.color}${config.symbol}${RESET}  ${status.padEnd(10)} ${statusCounts[status].toString().padStart(4)}`);
         }
       }

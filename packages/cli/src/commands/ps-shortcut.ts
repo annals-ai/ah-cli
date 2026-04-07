@@ -3,6 +3,7 @@ import { ensureDaemonRunning } from '../daemon/process.js';
 import { requestDaemon } from '../daemon/client.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, YELLOW, RED, CYAN, RESET, renderTable, type Column } from '../utils/table.js';
+import { truncate, formatRelativeTime, SESSION_STATUS_CONFIG } from '../utils/formatting.js';
 
 /**
  * Shortcut command: `ah ps` - show running sessions (like Unix `ps`)
@@ -58,39 +59,6 @@ export function registerPsShortcutCommand(program: Command): void {
             s.status === 'active' || s.status === 'running' || s.status === 'paused'
           );
 
-      // Define status color mapping with symbols
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        running: { color: GREEN, symbol: '●' },
-        active: { color: GREEN, symbol: '●' },
-        idle: { color: YELLOW, symbol: '○' },
-        paused: { color: YELLOW, symbol: '◐' },
-        failed: { color: RED, symbol: '✗' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        queued: { color: GRAY, symbol: '○' },
-      };
-
-      // Format relative time
-      const formatRelativeTime = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return 'now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        return `${diffDays}d`;
-      };
-
-      // Truncate helper
-      const truncate = (str: string, maxLen: number): string => {
-        if (!str) return '';
-        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-      };
-
       // Banner
       console.log('');
       console.log(`${CYAN}┌${'─'.repeat(60)}┐${RESET}`);
@@ -106,7 +74,7 @@ export function registerPsShortcutCommand(program: Command): void {
         console.log(`${CYAN}│${RESET}  ${GRAY}${'─'.repeat(58)}${RESET}${CYAN}│${RESET}`);
 
         for (const s of runningSessions.slice(0, 10)) {
-          const config = statusConfig[s.status] || { color: GRAY, symbol: '○' };
+          const config = SESSION_STATUS_CONFIG[s.status] || { color: GRAY, symbol: '○' };
           const id = s.id.slice(0, 8).padEnd(9);
           const agent = truncate(s.agentName || s.agentId?.slice(0, 8) || '-', 9).padEnd(10);
           const status = `${config.symbol} ${s.status}`.padEnd(11);

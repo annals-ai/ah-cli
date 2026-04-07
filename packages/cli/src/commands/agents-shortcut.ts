@@ -3,6 +3,7 @@ import { ensureDaemonRunning } from '../daemon/process.js';
 import { requestDaemon } from '../daemon/client.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, YELLOW, RESET, renderTable, type Column } from '../utils/table.js';
+import { truncate } from '../utils/formatting.js';
 
 /**
  * Shortcut command: `ah agents` - alias for `ah agent list`
@@ -84,12 +85,6 @@ export function registerAgentsShortcutCommand(program: Command): void {
         }
         return;
       }
-
-      // Truncate helper
-      const truncate = (str: string, maxLen: number): string => {
-        if (!str) return '';
-        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-      };
 
       // Define table columns
       const columns: Column[] = [

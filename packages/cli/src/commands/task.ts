@@ -4,6 +4,7 @@ import { ensureDaemonRunning } from '../daemon/process.js';
 import { requestDaemon } from '../daemon/client.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, YELLOW, RED, RESET, renderTable, type Column } from '../utils/table.js';
+import { truncate, formatRelativeTime, formatRelativeTimeLong, TASK_STATUS_CONFIG } from '../utils/formatting.js';
 
 export function registerTaskCommand(program: Command): void {
   const task = program
@@ -49,35 +50,6 @@ export function registerTaskCommand(program: Command): void {
         return;
       }
 
-      // Define status color mapping
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        active: { color: GREEN, symbol: '●' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        paused: { color: YELLOW, symbol: '◐' },
-      };
-
-      // Truncate helper
-      const truncate = (str: string, maxLen: number): string => {
-        if (!str) return '';
-        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-      };
-
-      // Format relative time
-      const formatRelativeTime = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        return `${diffDays}d`;
-      };
-
       // Define table columns
       const columns: Column[] = [
         { key: 'id', label: 'ID', width: 9 },
@@ -89,7 +61,7 @@ export function registerTaskCommand(program: Command): void {
 
       // Format rows
       const rows = result.taskGroups.map((tg) => {
-        const config = statusConfig[tg.status] || { color: GRAY, symbol: '○' };
+        const config = TASK_STATUS_CONFIG[tg.status] || { color: GRAY, symbol: '○' };
         return {
           id: tg.id.slice(0, 7),
           status: `${config.color}${config.symbol} ${tg.status}${RESET}`,
@@ -136,31 +108,7 @@ export function registerTaskCommand(program: Command): void {
 
       const tg = result.taskGroup;
 
-      // Define status color mapping
-      const statusConfig: Record<string, { color: string; symbol: string }> = {
-        active: { color: GREEN, symbol: '●' },
-        completed: { color: GRAY, symbol: '✓' },
-        archived: { color: GRAY, symbol: '◇' },
-        paused: { color: YELLOW, symbol: '◐' },
-      };
-
-      // Format relative time
-      const formatRelativeTime = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins} minutes ago`;
-        if (diffHours < 24) return `${diffHours} hours ago`;
-        if (diffDays === 1) return 'yesterday';
-        return `${diffDays} days ago`;
-      };
-
-      const config = statusConfig[tg.status] || { color: GRAY, symbol: '○' };
+      const config = TASK_STATUS_CONFIG[tg.status] || { color: GRAY, symbol: '○' };
 
       // Header
       console.log(`\n${BOLD}Task Group Details${RESET}\n`);
@@ -169,7 +117,7 @@ export function registerTaskCommand(program: Command): void {
       console.log(`  ${GRAY}ID:${RESET}        ${tg.id}`);
       console.log(`  ${GRAY}Title:${RESET}     ${tg.title || '(no title)'}`);
       console.log(`  ${GRAY}Status:${RESET}    ${config.color}${config.symbol} ${tg.status}${RESET}`);
-      console.log(`  ${GRAY}Created:${RESET}   ${formatRelativeTime(tg.createdAt)}`);
+      console.log(`  ${GRAY}Created:${RESET}   ${formatRelativeTimeLong(tg.createdAt)}`);
       if (tg.source) {
         console.log(`  ${GRAY}Source:${RESET}    ${tg.source}`);
       }
@@ -189,12 +137,6 @@ export function registerTaskCommand(program: Command): void {
           archived: { color: GRAY, symbol: '◇' },
         };
 
-        // Truncate helper
-        const truncate = (str: string, maxLen: number): string => {
-          if (!str) return '';
-          return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-        };
-
         // Define session table columns
         const columns: Column[] = [
           { key: 'id', label: 'ID', width: 9 },
@@ -210,7 +152,7 @@ export function registerTaskCommand(program: Command): void {
             id: s.id.slice(0, 8),
             status: `${sConfig.color}${sConfig.symbol} ${s.status}${RESET}`,
             agent: truncate(s.agentName || '-', 10),
-            active: formatRelativeTime(s.lastActiveAt),
+            active: formatRelativeTimeLong(s.lastActiveAt),
             title: truncate(s.title || '(no title)', 32),
           };
         });

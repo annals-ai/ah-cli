@@ -6,6 +6,7 @@ import { requestDaemon } from '../daemon/client.js';
 import { listProviders } from '../providers/index.js';
 import { log } from '../utils/logger.js';
 import { BOLD, GRAY, GREEN, YELLOW, RED, RESET, renderTable, type Column } from '../utils/table.js';
+import { truncate } from '../utils/formatting.js';
 
 function parseCapabilities(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
@@ -137,12 +138,6 @@ export function registerAgentCommand(program: Command): void {
         }
         return;
       }
-
-      // Truncate helper
-      const truncate = (str: string, maxLen: number): string => {
-        if (!str) return '';
-        return str.length > maxLen ? str.slice(0, maxLen - 3) + '...' : str;
-      };
 
       // Define table columns
       const columns: Column[] = [
