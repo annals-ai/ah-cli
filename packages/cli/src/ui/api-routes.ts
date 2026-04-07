@@ -189,7 +189,6 @@ async function buildDashboardSnapshot(
     agents,
     providerCatalog: getProviderCatalog(),
     sessions,
-    tasks: options.store.listTaskGroups(),
     providers,
     logs: readLogTail(logPath, lines),
     logPath,

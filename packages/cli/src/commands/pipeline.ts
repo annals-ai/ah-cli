@@ -1,13 +1,11 @@
 import type { Command } from 'commander';
-import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { loadToken } from '../platform/auth.js';
 import { createClient } from '../platform/api-client.js';
 import { resolveAgentId } from '../platform/resolve-agent.js';
 import { resolveLocalAgentRef, runLocalCall } from './local-runtime.js';
 import { log } from '../utils/logger.js';
-import { GRAY, RESET, BOLD, GREEN } from '../utils/table.js';
+import { GRAY, RESET, BOLD } from '../utils/table.js';
 
 const DEFAULT_BASE_URL = 'https://agents.hot';
 
