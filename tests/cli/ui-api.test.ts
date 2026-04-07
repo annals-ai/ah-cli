@@ -423,4 +423,40 @@ describe('AgentNetworkDaemonServer UI API', () => {
     // because no real WebSocket connection exists in the test environment
     expect(['online', 'error']).toContain(status.agents[0]?.status);
   });
+
+  it('creates and archives task groups through the ui api', async () => {
+    server = new AgentNetworkDaemonServer({ dbPath, uiPort: 0 });
+    const address = await server.listenForTest();
+
+    const created = await postJson<{ taskGroup: { id: string; title: string; status: string; source: string } }>(
+      `${address.uiBaseUrl}/api/tasks`,
+      {
+        title: 'UI Follow-ups',
+        source: 'ui',
+      },
+    );
+
+    const archived = await postJson<{ taskGroup: { id: string; status: string } }>(
+      `${address.uiBaseUrl}/api/tasks/${created.taskGroup.id}/archive`,
+      {},
+    );
+
+    const tasks = await fetchJson<{ items: Array<{ id: string; title: string; status: string }> }>(
+      `${address.uiBaseUrl}/api/tasks`,
+    );
+
+    expect(created.taskGroup).toMatchObject({
+      title: 'UI Follow-ups',
+      status: 'active',
+      source: 'ui',
+    });
+    expect(archived.taskGroup).toMatchObject({
+      id: created.taskGroup.id,
+      status: 'archived',
+    });
+    expect(tasks.items.find((task) => task.id === created.taskGroup.id)).toMatchObject({
+      title: 'UI Follow-ups',
+      status: 'archived',
+    });
+  });
 });

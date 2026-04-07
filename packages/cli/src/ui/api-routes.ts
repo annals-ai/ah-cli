@@ -184,10 +184,12 @@ async function buildDashboardSnapshot(
       agents: agents.length,
       sessions: sessions.length,
       providerBindings: providers.length,
+      taskGroups: options.store.listTaskGroups().length,
     },
     agents,
     providerCatalog: getProviderCatalog(),
     sessions,
+    tasks: options.store.listTaskGroups(),
     providers,
     logs: readLogTail(logPath, lines),
     logPath,
@@ -514,6 +516,23 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
         return true;
       }
 
+      // ── Task Group POST routes ────────────────────────────
+
+      if (method === 'POST' && segments.length === 4 && segments[1] === 'tasks' && segments[3] === 'archive') {
+        const taskGroup = options.store.archiveTaskGroup(segments[2]);
+        writeJson(response, 200, { taskGroup });
+        return true;
+      }
+
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'tasks') {
+        const body = await readJsonBody(request);
+        const title = expectNonEmptyString(body?.title, 'title');
+        const source = typeof body?.source === 'string' ? body.source : 'ui';
+        const taskGroup = options.store.createTaskGroup({ title, source });
+        writeJson(response, 200, { taskGroup });
+        return true;
+      }
+
       if (method !== 'GET') {
         writeJson(response, 405, { error: 'method_not_allowed' });
         return true;
@@ -618,6 +637,12 @@ export function createUiApiHandler(options: UiApiRoutesOptions): UiHttpRequestHa
           () => readSessionMessagesSnapshot(options, session.id),
           haveSessionMessageSnapshotsChanged,
         );
+        return true;
+      }
+
+      if (method === 'GET' && segments.length === 2 && segments[1] === 'tasks') {
+        const items = options.store.listTaskGroups();
+        writeJson(response, 200, { items });
         return true;
       }
 

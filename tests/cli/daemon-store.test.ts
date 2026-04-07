@@ -180,6 +180,42 @@ describe('DaemonStore', () => {
     // Check no access
     expect(store.checkAccess(agent.id, 'user@example.com', 'call')).toBe(false);
   });
+
+  it('creates and lists task groups with session linkage', () => {
+    const agent = store.createAgent({
+      name: 'Task Agent',
+      projectPath: '/tmp/task-agent',
+      capabilities: [],
+    });
+    const group = store.createTaskGroup({
+      title: 'Sprint 1 tasks',
+      source: 'fan-out',
+    });
+
+    expect(group.title).toBe('Sprint 1 tasks');
+    expect(group.source).toBe('fan-out');
+    expect(group.status).toBe('active');
+
+    const session = store.createSession({
+      agentId: agent.id,
+      title: 'Grouped session',
+      status: 'idle',
+      taskGroupId: group.id,
+    });
+    expect(session.taskGroupId).toBe(group.id);
+
+    const counts = store.getSessionCountsByTaskGroup();
+    expect(counts[group.id]).toBe(1);
+
+    const groups = store.listTaskGroups();
+    expect(groups.length).toBe(1);
+
+    const archived = store.archiveTaskGroup(group.id);
+    expect(archived.status).toBe('archived');
+
+    const activeOnly = store.listTaskGroups({ status: 'active' });
+    expect(activeOnly.length).toBe(0);
+  });
 });
 
 describe('buildPromptFromHistory', () => {

@@ -11,6 +11,9 @@ import type {
   DaemonAgent,
   ExecuteSessionInput,
   ExecuteSessionResult,
+  FanOutAgentResult,
+  FanOutInput,
+  FanOutResult,
   RuntimeStreamEvent,
   SessionMessage,
   SessionRecord,
@@ -125,6 +128,7 @@ export class DaemonRuntime {
         const updatedSession = this.store.updateSession(session.id, {
           status: 'active',
           title: currentSession.title ?? input.title ?? truncateTitle(input.message),
+          taskGroupId: input.taskGroupId ?? currentSession.taskGroupId,
           tags,
           touchLastActive: true,
         });
@@ -139,6 +143,7 @@ export class DaemonRuntime {
             mode: input.mode,
             origin: input.origin ?? 'local_cli',
             client_id: input.clientId ?? null,
+            task_group_id: updatedSession.taskGroupId,
             attachments: (input.attachments ?? []).map((attachment) => ({
               name: attachment.name,
               type: attachment.type,
@@ -308,6 +313,7 @@ export class DaemonRuntime {
         const created = this.store.createSession({
           id: input.sessionId,
           agentId: agent.id,
+          taskGroupId: input.taskGroupId,
           origin: input.origin ?? 'local_cli',
           principalType: input.principalType ?? 'owner_local',
           principalId: input.principalId ?? 'owner',
@@ -321,6 +327,11 @@ export class DaemonRuntime {
       const agent = this.store.getAgentById(session.agentId);
       if (!agent) throw new Error(`Agent not found for session: ${session.agentId}`);
 
+      if (input.taskGroupId && input.taskGroupId !== session.taskGroupId) {
+        const updated = this.store.updateSession(session.id, { taskGroupId: input.taskGroupId });
+        return { session: updated, agent };
+      }
+
       return { session, agent };
     }
 
@@ -329,6 +340,7 @@ export class DaemonRuntime {
         sourceSessionId: input.forkFromSessionId,
         title: input.title,
         tags: input.tags,
+        taskGroupId: input.taskGroupId,
       });
       const agent = this.store.getAgentById(session.agentId);
       if (!agent) throw new Error(`Agent not found for session: ${session.agentId}`);
@@ -346,6 +358,7 @@ export class DaemonRuntime {
 
     const session = this.store.createSession({
       agentId: agent.id,
+      taskGroupId: input.taskGroupId,
       origin: input.origin ?? 'local_cli',
       principalType: input.principalType ?? 'owner_local',
       principalId: input.principalId ?? 'owner',
@@ -363,6 +376,103 @@ export class DaemonRuntime {
     if (adapter) {
       this.adapters.delete(agentId);
     }
+  }
+
+  async fanOut(input: FanOutInput, emit: (event: RuntimeStreamEvent) => void): Promise<FanOutResult> {
+    const agents: DaemonAgent[] = [];
+    for (const ref of input.agentRefs) {
+      const agent = this.store.resolveAgentRef(ref);
+      if (!agent) throw new Error(`Local agent not found: ${ref}`);
+      agents.push(agent);
+    }
+
+    if (input.synthesizerRef) {
+      const synthAgent = this.store.resolveAgentRef(input.synthesizerRef);
+      if (!synthAgent) throw new Error(`Synthesizer agent not found: ${input.synthesizerRef}`);
+    }
+
+    const taskGroup = this.store.createTaskGroup({
+      title: `Fan-out: ${truncateTitle(input.task)}`,
+      source: 'fan-out',
+    });
+
+    const settled = await Promise.allSettled(
+      agents.map(async (agent, i): Promise<FanOutAgentResult> => {
+        emit({ type: 'fan-out-progress', agentSlug: agent.slug, status: 'started' });
+
+        const execResult = await this.execute({
+          agentRef: input.agentRefs[i],
+          message: input.task,
+          mode: 'call',
+          taskGroupId: taskGroup.id,
+          tags: input.tags,
+        }, (event) => {
+          if (event.type === 'chunk') {
+            emit({ type: 'fan-out-progress', agentSlug: agent.slug, status: 'chunk', delta: event.delta });
+          }
+        });
+
+        emit({ type: 'fan-out-progress', agentSlug: agent.slug, status: 'done' });
+
+        return {
+          agentRef: input.agentRefs[i],
+          agentSlug: agent.slug,
+          sessionId: execResult.session.id,
+          result: execResult.result,
+        };
+      }),
+    );
+
+    const results: FanOutAgentResult[] = settled.map((outcome, i) => {
+      if (outcome.status === 'fulfilled') return outcome.value;
+      emit({ type: 'fan-out-progress', agentSlug: agents[i].slug, status: 'error', error: (outcome.reason as Error).message });
+      return {
+        agentRef: input.agentRefs[i],
+        agentSlug: agents[i].slug,
+        sessionId: '',
+        result: '',
+        error: (outcome.reason as Error).message,
+      };
+    });
+
+    let verdict: string | undefined;
+    if (input.synthesizerRef) {
+      const synthAgent = this.store.resolveAgentRef(input.synthesizerRef);
+      if (!synthAgent) throw new Error(`Synthesizer agent not found: ${input.synthesizerRef}`);
+
+      const summaryLines = results.map((r) =>
+        r.error
+          ? `## ${r.agentSlug}\n[ERROR] ${r.error}`
+          : `## ${r.agentSlug}\n${r.result}`,
+      );
+
+      const synthPrompt = [
+        'You are synthesizing the results of a fan-out task.',
+        'Below are the responses from multiple agents for the same task.',
+        '',
+        `Task: ${input.task}`,
+        '',
+        ...summaryLines,
+        '',
+        'Provide a unified synthesis/verdict.',
+      ].join('\n');
+
+      const synthResult = await this.execute({
+        agentRef: input.synthesizerRef,
+        message: synthPrompt,
+        mode: 'call',
+        taskGroupId: taskGroup.id,
+        tags: input.tags,
+      }, (event) => {
+        if (event.type === 'chunk') {
+          emit({ type: 'fan-out-verdict', delta: event.delta });
+        }
+      });
+
+      verdict = synthResult.result;
+    }
+
+    return { taskGroupId: taskGroup.id, results, verdict };
   }
 
   private getAdapter(agent: DaemonAgent): AgentAdapter {
