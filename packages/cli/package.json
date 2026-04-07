@@ -1,6 +1,6 @@
 {
   "name": "@annals/ah-cli",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "description": "CLI bridge connecting local AI agents to the Agents.Hot platform",
   "type": "module",
   "bin": {
