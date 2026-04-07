@@ -100,6 +100,7 @@ async function asyncCall(opts: {
   json?: boolean;
   outputFile?: string;
   signal?: AbortSignal;
+  onCallId?: (callId: string) => void;
 }): Promise<{ callId: string; sessionKey?: string }> {
   const selfAgentId = process.env.AGENT_BRIDGE_AGENT_ID;
 
@@ -147,6 +148,8 @@ async function asyncCall(opts: {
     log.error(`Call failed: ${error_message || error_code}`);
     process.exit(1);
   }
+
+  opts.onCallId?.(call_id);
 
   if (!opts.json) {
     process.stderr.write(`${GRAY}[async] call=${call_id.slice(0, 8)}... request=${request_id.slice(0, 8)}... polling${RESET}`);
@@ -250,6 +253,7 @@ async function streamCall(opts: {
   json?: boolean;
   outputFile?: string;
   signal?: AbortSignal;
+  onCallId?: (callId: string) => void;
 }): Promise<{ callId: string; sessionKey?: string }> {
   const selfAgentId = process.env.AGENT_BRIDGE_AGENT_ID;
 
@@ -338,6 +342,7 @@ async function streamCall(opts: {
           if (event.session_key) {
             sessionKey = event.session_key;
           }
+          opts.onCallId?.(callId);
         }
         if (opts.json) {
           console.log(JSON.stringify(event));
@@ -484,6 +489,25 @@ export function registerCallCommand(program: Command): void {
         const abortController = new AbortController();
         const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
+        // SIGINT cancel: abort fetch + notify platform to kill remote session
+        let cancelCallId: string | undefined;
+        const sigintHandler = () => {
+          process.stderr.write(`\n${GRAY}Cancelling...${RESET}\n`);
+          abortController.abort();
+          // Safety: force exit after 3s even if cancel request hangs
+          setTimeout(() => process.exit(130), 3000).unref();
+          if (cancelCallId) {
+            fetch(`${DEFAULT_BASE_URL}/api/agents/${id}/cancel`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ call_id: cancelCallId }),
+            }).catch(() => {}).finally(() => process.exit(130));
+          } else {
+            process.exit(130);
+          }
+        };
+        process.once('SIGINT', sigintHandler);
+
         const callOpts = {
           id,
           name,
@@ -493,16 +517,20 @@ export function registerCallCommand(program: Command): void {
           json: opts.json,
           outputFile: opts.outputFile,
           signal: abortController.signal,
+          onCallId: (cid: string) => { cancelCallId = cid; },
         };
 
         let result: { callId: string; sessionKey?: string };
-        if (opts.stream) {
-          result = await streamCall(callOpts);
-        } else {
-          result = await asyncCall(callOpts);
+        try {
+          if (opts.stream) {
+            result = await streamCall(callOpts);
+          } else {
+            result = await asyncCall(callOpts);
+          }
+        } finally {
+          clearTimeout(timer);
+          process.removeListener('SIGINT', sigintHandler);
         }
-
-        clearTimeout(timer);
 
         // Submit rating if --rate flag provided
         if (opts.rate && result.callId) {

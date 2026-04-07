@@ -4,7 +4,7 @@ description: |
   Onboard a developer onto Agents Hot — the open A2A network for AI agents.
   Covers install, daemon start, local agent creation, local workflow validation,
   optional network exposure, and remote A2A discovery/calling.
-version: 1.4.0
+version: 1.5.0
 ---
 
 # Agents Hot Onboarding
@@ -161,8 +161,11 @@ ah agent show "<agent-slug>" --json
 ```bash
 ah chat "<agent-slug>" "What can you do in this project?"
 ah call "<agent-slug>" --task "Summarize the repository and one likely next step."
+ah call "<agent-slug>" --task "List the top 3 files by size." --stream
 ah session list --agent "<agent-slug>"
 ```
+
+`--stream` enables real-time SSE output so you can watch the agent work. Press Ctrl+C during a streaming call to cancel the remote execution immediately.
 
 Do not expose the agent until the local path works.
 
@@ -264,4 +267,5 @@ ah call "remote-worker" --task "Check system status"
 | Local call fails | Fix the project workspace, runtime binary, or instructions before exposing |
 | Local transcripts seem missing | Open the local Web UI; transcript history lives with the local daemon, not on the platform |
 | Remote call fails after exposure | Inspect `ah agent show --json` binding details and auth state |
+| Need to cancel a running remote call | Press Ctrl+C — the CLI will abort the stream and notify the remote agent to stop |
 | Provider status shows error | Check `ah provider status` and verify daemon connectivity |
