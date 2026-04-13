@@ -189,10 +189,140 @@ export const CLAUDE_PROFILE: CliProfile = {
   configDirs: [], // Claude's config dirs are already in SENSITIVE_PATHS
 };
 
+// ── Codex Output Parser ────────────────────────────────
+
+export class CodexOutputParser implements OutputParser {
+  private threadId: string | null = null;
+
+  parseLine(line: string): ParsedEvent | null {
+    if (!line.trim()) return null;
+
+    let event: AnyEvent;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      log.debug(`Codex non-JSON line: ${line}`);
+      return null;
+    }
+
+    return this.handleEvent(event);
+  }
+
+  private handleEvent(event: AnyEvent): ParsedEvent | null {
+    switch (event.type) {
+      case 'thread.started':
+        if (event.thread_id) {
+          this.threadId = event.thread_id;
+          return { type: 'init', sessionId: event.thread_id };
+        }
+        return null;
+
+      case 'item.completed': {
+        const item = event.item;
+        if (!item) return null;
+
+        if (item.type === 'agent_message' && item.text) {
+          return { type: 'chunk', text: item.text };
+        }
+
+        if (item.type === 'command_execution') {
+          const callId = item.id || `cmd-${Date.now()}`;
+          const command = item.command || '';
+          const output = item.aggregated_output || '';
+          const isError = item.exit_code !== 0 && item.exit_code !== null;
+          return {
+            type: 'tool',
+            event: {
+              kind: 'tool_result',
+              tool_name: 'shell',
+              tool_call_id: callId,
+              delta: isError ? `[exit ${item.exit_code}] ${output}` : output,
+            },
+          };
+        }
+
+        if (item.type === 'file_edit') {
+          const callId = item.id || `edit-${Date.now()}`;
+          return {
+            type: 'tool',
+            event: {
+              kind: 'tool_result',
+              tool_name: 'file_edit',
+              tool_call_id: callId,
+              delta: item.filepath || '',
+            },
+          };
+        }
+
+        return null;
+      }
+
+      case 'item.started': {
+        const item = event.item;
+        if (!item) return null;
+
+        if (item.type === 'command_execution') {
+          const callId = item.id || `cmd-${Date.now()}`;
+          return {
+            type: 'tool',
+            event: {
+              kind: 'tool_start',
+              tool_name: 'shell',
+              tool_call_id: callId,
+              delta: item.command || '',
+            },
+          };
+        }
+
+        return null;
+      }
+
+      case 'turn.completed':
+        return { type: 'done' };
+
+      default:
+        return null;
+    }
+  }
+}
+
+// ── Codex Profile ──────────────────────────────────────
+
+const CODEX_RUNTIME_WRITE_PATHS = [
+  `${HOME_DIR}/.codex`,
+  `${HOME_DIR}/.config/codex`,
+];
+
+const CODEX_ENV_PASSTHROUGH_KEYS = [
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'OPENAI_ORG_ID',
+  'AGENT_BRIDGE_AGENT_ID',
+];
+
+export const CODEX_PROFILE: CliProfile = {
+  command: 'codex',
+  displayName: 'Codex',
+  buildArgs: (msg, _resumeSessionId) => [
+    'exec',
+    '--json',
+    '--full-auto',
+    '--ephemeral',
+    '--skip-git-repo-check',
+    msg,
+  ],
+  createParser: () => new CodexOutputParser(),
+  runtimeWritePaths: CODEX_RUNTIME_WRITE_PATHS,
+  envPassthroughKeys: CODEX_ENV_PASSTHROUGH_KEYS,
+  configDirs: [`${HOME_DIR}/.codex`, `${HOME_DIR}/.config/codex`],
+  autoEmitDoneOnExit: true,
+};
+
 // ── Profile registry ────────────────────────────────────
 
 export const PROFILES: Record<string, CliProfile> = {
   claude: CLAUDE_PROFILE,
+  codex: CODEX_PROFILE,
 };
 
 export function getProfile(type: string): CliProfile {
