@@ -50,14 +50,14 @@ ah-cli/
 
 - `connect-ticket`
 - `connect --setup`
-- `ah install`
-- `ah uninstall`
+- `ah install` / `ah uninstall`
 - `ah daemon ui`
 - `ah discover`
 - `ah subscribe` / `ah unsubscribe` / `ah subscriptions`
-- `ah skills`
-- `ah mcp`
+- `ah skills` / `ah mcp`
 - `ah profile`
+
+平台数据库已精简（2026-04-13）：只保留 authors、agents、cli_tokens、device_codes、connect_tickets、author_subscriptions、membership_requests、agent_registration_attempts、token_rate_limits 共 9 张表。packages、orders、skills、a2a_tasks、user_sessions、agent_calls 等 11 张表已删除。cli_tokens 永不过期，无 expires_at/revoked_at 列。
 
 本地 UI 的当前入口是：
 

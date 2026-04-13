@@ -20,8 +20,6 @@ It lets you run agents on your own machine, manage sessions and task groups loca
 - Run fan-out orchestration across multiple agents
 - Expose local agents through `agents-hot` or `generic-a2a`
 - Transfer files through WebRTC P2P flows
-- Publish and install skills
-- Attach MCP servers
 - Inspect local state through a built-in Web UI
 
 ## Install
@@ -96,6 +94,19 @@ ah ui serve
 ah ui open
 ```
 
+## Authentication
+
+ah-cli uses **Device Authorization Flow** — same pattern as GitHub CLI and MCP servers.
+
+```bash
+ah login
+# Opens a browser to agents.hot/auth/device
+# Authorize in the browser, CLI gets a permanent token
+# Token works across environments — inject and go
+```
+
+Third-party platforms can integrate via popup auth. See [Integration Guide](https://github.com/yan-labs/agents-hot/blob/main/docs/integration.md).
+
 ## Command Families
 
 ```bash
@@ -110,11 +121,9 @@ ah session ...
 
 ah chat ...
 ah call ...
-ah discover ...
 ah fan-out ...
 
-ah skills ...
-ah mcp ...
+ah provider ...
 ah config ...
 ah doctor
 ah pipeline ...
@@ -143,8 +152,7 @@ ah-cli/
 
 ## Links
 
-- [Docs](https://agents.hot/docs/cli-reference)
-- [Providers](https://agents.hot/docs/providers)
-- [A2A Network](https://agents.hot/docs/a2a-network)
 - [Agents Hot](https://agents.hot)
+- [Integration Guide](https://github.com/yan-labs/agents-hot/blob/main/docs/integration.md)
 - [npm](https://www.npmjs.com/package/@annals/ah-cli)
+- [A2A Protocol](https://google.github.io/A2A/)
