@@ -1,0 +1,13 @@
+{
+  "name": "self-hosted-a2a",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx server.ts",
+    "dev": "npx tsx --watch server.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0"
+  }
+}
