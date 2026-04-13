@@ -139,12 +139,11 @@ export function registerAgentCommand(program: Command): void {
         return;
       }
 
-      // Define table columns
+      // Define table columns (runtime is an internal detail — only visible in `ah agent show`)
       const columns: Column[] = [
         { key: 'id', label: 'ID', width: 8 },
         { key: 'slug', label: 'Slug', width: 16 },
-        { key: 'runtime', label: 'Runtime', width: 9 },
-        { key: 'name', label: 'Name', width: 20 },
+        { key: 'name', label: 'Name', width: 24 },
         { key: 'sandbox', label: 'Sandbox', width: 8 },
         { key: 'visibility', label: 'Visibility', width: 10 },
         { key: 'providers', label: 'Providers', width: 24 },
@@ -173,8 +172,7 @@ export function registerAgentCommand(program: Command): void {
         return {
           id: agent.id.slice(0, 7),
           slug: truncate(agent.slug, 14),
-          runtime: agent.runtimeType,
-          name: truncate(agent.name, 18),
+          name: truncate(agent.name, 22),
           sandbox: sandboxDisplay,
           visibility: `${visibilityColor}${agent.visibility}${RESET}`,
           providers: providerSummary,

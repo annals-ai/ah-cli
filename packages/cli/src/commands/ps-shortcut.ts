@@ -95,13 +95,12 @@ export function registerPsShortcutCommand(program: Command): void {
         console.log(`${CYAN}│${RESET}  ${GRAY}No agents registered${RESET}${' '.repeat(39)}${CYAN}│${RESET}`);
       } else {
         console.log(`${CYAN}│${RESET}  ${BOLD}AGENTS${RESET}${' '.repeat(53)}${CYAN}│${RESET}`);
-        console.log(`${CYAN}│${RESET}  ${GRAY}ID      Name                 Runtime    Providers${RESET}${' '.repeat(12)}${CYAN}│${RESET}`);
+        console.log(`${CYAN}│${RESET}  ${GRAY}ID      Name                          Providers${RESET}${' '.repeat(12)}${CYAN}│${RESET}`);
         console.log(`${CYAN}│${RESET}  ${GRAY}${'─'.repeat(58)}${RESET}${CYAN}│${RESET}`);
 
         for (const a of agentResult.agents.slice(0, 5)) {
           const id = a.id.slice(0, 7).padEnd(7);
-          const name = truncate(a.name, 19).padEnd(20);
-          const runtime = a.runtimeType.padEnd(9);
+          const name = truncate(a.name, 25).padEnd(26);
 
           const bindings = agentResult.bindings.filter((b) => b.agentId === a.id);
           const activeBindings = bindings.filter((b) => b.status === 'active');
@@ -109,9 +108,9 @@ export function registerPsShortcutCommand(program: Command): void {
             ? activeBindings.map((b) => b.provider).join(', ')
             : '-';
 
-          const providers = truncate(providersStr, 20);
+          const providers = truncate(providersStr, 24);
 
-          console.log(`${CYAN}│${RESET}  ${id} ${name} ${runtime} ${providers}${' '.repeat(Math.max(0, 21 - providers.length))}${CYAN}│${RESET}`);
+          console.log(`${CYAN}│${RESET}  ${id} ${name} ${providers}${' '.repeat(Math.max(0, 25 - providers.length))}${CYAN}│${RESET}`);
         }
 
         if (agentResult.agents.length > 5) {
