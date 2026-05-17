@@ -1,7 +1,26 @@
 {
   "name": "@annals/ah-cli",
   "version": "0.25.1",
-  "description": "CLI bridge connecting local AI agents to the Agents.Hot platform",
+  "description": "Daemon-first local runtime for AI agents. Run Claude/Codex agents on your own machine, keep transcripts local, orchestrate multi-agent fan-out, and expose over A2A.",
+  "keywords": [
+    "ai-agents",
+    "ai-agent",
+    "a2a",
+    "a2a-protocol",
+    "agent2agent",
+    "agent-runtime",
+    "agent-orchestration",
+    "multi-agent",
+    "local-first",
+    "self-hosted",
+    "claude",
+    "codex",
+    "mcp",
+    "llm",
+    "cli",
+    "daemon",
+    "agentic-ai"
+  ],
   "type": "module",
   "bin": {
     "ah": "dist/index.js"
