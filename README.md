@@ -37,6 +37,20 @@ That's it. No platform account required to *run* agents — only to *publish* th
 
 ---
 
+## 🤖 Use with AI Agents
+
+ah-cli ships a [`SKILL.md`](./SKILL.md) — install it into Claude Code, Cursor, Codex, or any compatible agent so your assistant can drive ah-cli for you:
+
+```bash
+npx skills add annals-ai/ah-cli
+# or, with the ClawHub CLI
+clawhub install annals-ai/ah-cli
+```
+
+Your agent can then register, run, orchestrate, and expose local agents on your behalf.
+
+---
+
 ## Why ah-cli
 
 Most "agent platforms" make you create the agent in their cloud first, then bolt a local process on later. Your prompts, transcripts, and orchestration state end up on someone else's server by default.
