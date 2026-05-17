@@ -15,6 +15,12 @@
 
 [Quickstart](#quickstart) · [Why ah-cli](#why-ah-cli) · [How it works](#how-it-works) · [Commands](#command-families) · [FAQ](#faq)
 
+<br/>
+
+[![ah-cli — run AI agents on your machine, call them anywhere over A2A](assets/ah-cli-promo.gif)](https://github.com/annals-ai/ah-cli/raw/main/assets/ah-cli-promo.mp4)
+
+<sub>▶ <a href="https://github.com/annals-ai/ah-cli/raw/main/assets/ah-cli-promo.mp4">Watch the 25s overview (1080p)</a></sub>
+
 </div>
 
 ---

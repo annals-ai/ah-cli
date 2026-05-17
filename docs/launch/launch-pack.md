@@ -4,9 +4,10 @@ Ready-to-paste copy for a coordinated launch. Pick a launch day, fire these
 within the same 2-hour window, then sustain for 7 days. Audience is the
 local-agent / A2A / MCP / self-hosted-LLM crowd — not generic devs.
 
-> Replace `DEMO_URL` with an asciinema or 20s GIF before posting. A CLI launch
-> without a demo loses ~half its conversion. Record:
-> `ah login → daemon start → agent add → chat → agent expose` in one take.
+> Demo asset is ready: 25s 1080p promo at `assets/ah-cli-promo.mp4`
+> (GIF: `assets/ah-cli-promo.gif`, embedded as the README hero). For HN/Reddit,
+> uploading the mp4 directly converts better than a link — or pair it with a
+> real terminal asciinema of `login → daemon start → agent add → chat → expose`.
 
 ---
 
@@ -41,7 +42,7 @@ network, or as a plain self-hosted A2A v1.0 HTTP endpoint with no vendor lock.
 Supported runtimes today: claude, codex. Multi-agent fan-out and pipelines
 run locally. File transfer between agents is WebRTC P2P — no server relay.
 
-Demo: DEMO_URL
+Demo: https://github.com/annals-ai/ah-cli/raw/main/assets/ah-cli-promo.mp4
 Repo: https://github.com/annals-ai/ah-cli
 npm:  https://www.npmjs.com/package/@annals/ah-cli
 
@@ -146,7 +147,7 @@ zero server relay.
 - a plain self-hosted A2A v1.0 endpoint (no vendor lock)
 
 5/ Runtimes: claude, codex today.
-Demo: DEMO_URL
+Demo: https://github.com/annals-ai/ah-cli/raw/main/assets/ah-cli-promo.mp4
 Repo: github.com/annals-ai/ah-cli
 ⭐ if local-first agents are your thing.
 ```
