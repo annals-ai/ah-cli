@@ -36,13 +36,11 @@ The `vercel-labs/skills` CLI installs every skill under `.agents/skills/*`,
 pulls all of: `ah-cli` (the public usage skill — good), plus the internal
 dev skills `ah-dev`, `ah-creator`, `ah-a2a`, `agents-hot-onboarding`.
 
-Public installers therefore also get the internal dev tooling. Owner decision
-(not done autonomously — affects skill architecture):
-
-- Option A: accept it (dev skills are harmless, just noisy).
-- Option B: mark the internal ones private (frontmatter `private: true`) or
-  move them out of `.agents/skills/` so only `ah-cli` is publicly installable.
-  Recommended before the launch push so skills.sh shows one clean entry.
+**Resolved (Option B applied):** `ah-dev`, `ah-creator`, `ah-a2a`,
+`agents-hot-onboarding` now carry `private: true` in their frontmatter, so the
+public `npx skills add annals-ai/ah-cli` / skills.sh surface should show only
+the clean `ah-cli` entry. Pushed; takes effect when skills.sh re-crawls the
+repo (server-side index, not live git — no manual trigger, no account).
 
 ## What actually drives skills.sh ranking
 

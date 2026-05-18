@@ -7,10 +7,13 @@ entry text below are pre-matched to each list's existing style — copy-paste re
 
 - ✅ **Submitted — [ai-boost/awesome-a2a#109](https://github.com/ai-boost/awesome-a2a/pull/109)** (593★, best fit)
 - ✅ **Submitted — [pab1it0/awesome-a2a#58](https://github.com/pab1it0/awesome-a2a/pull/58)** (171★, legend markers matched)
+- ✅ **Submitted — [e2b-dev/awesome-ai-agents#970](https://github.com/e2b-dev/awesome-ai-agents/pull/970)** (27.9k★, full Category/Description/Links entry, alpha-placed)
 - ❌ **Skipped — questflowai/awesome-a2a-hub** — not a real tools list; it's a vendor
   catalog where every entry is an agent hosted on a2a.build. ah-cli is a runtime,
   not a hosted agent → off-topic, would be rejected. Don't force it.
-- ⏳ Pending owner action: e2b-dev / Shubhamsaboo / kyrolabs / bulk lists (see gating below).
+- ⏳ Still gated: Shubhamsaboo/awesome-llm-apps (needs a runnable example app),
+  kyrolabs/awesome-agents (auto-closes <~50★ repos — hold for traction),
+  slavakurilyak / jim-schwoebel bulk lists (low priority).
 
 ## Priority order & gating
 
