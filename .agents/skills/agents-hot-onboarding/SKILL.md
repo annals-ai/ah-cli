@@ -5,6 +5,7 @@ description: |
   Covers install, daemon start, local agent creation, local workflow validation,
   optional network exposure, and remote A2A discovery/calling.
 version: 1.5.0
+private: true
 ---
 
 # Agents Hot Onboarding

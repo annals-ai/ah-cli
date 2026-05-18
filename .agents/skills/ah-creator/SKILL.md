@@ -5,6 +5,7 @@ description: |
   Use when setting up new agents, inspecting daemon state, exposing agents
   to the A2A network, managing skills/MCP, or troubleshooting local runtime.
 version: 0.3.0
+private: true
 ---
 
 # ah-cli - Create, Manage, and Expose Agents

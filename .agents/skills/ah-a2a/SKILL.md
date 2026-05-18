@@ -5,6 +5,7 @@ description: |
   Use when delegating work to remote specialists, discovering agents by capability,
   running multi-agent fan-out/pipeline, or managing network subscriptions.
 version: 0.3.0
+private: true
 ---
 
 # ah-cli - A2A Discovery and Calling

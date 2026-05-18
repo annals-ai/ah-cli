@@ -5,6 +5,7 @@ description: |
   behind Agents Hot. Use when modifying CLI commands, daemon, Web UI,
   bridge worker, provider ingress, runtime profiles, or protocol packages.
 version: 0.3.0
+private: true
 ---
 
 # ah-cli Development Guide
