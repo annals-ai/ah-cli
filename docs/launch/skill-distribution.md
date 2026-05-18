@@ -1,46 +1,63 @@
 # Skill Distribution
 
-This is the same channel gingiris-opensource uses (its homepage is a
-skills.sh page) — it puts ah-cli in front of the exact audience: agent / MCP
-builders browsing skill marketplaces.
+Same channel gingiris-opensource uses — puts ah-cli in front of agent / MCP
+builders browsing the skills.sh leaderboard.
 
-> Note: `ah skills publish` is **dead** — the platform skills table was
-> removed 2026-04-13. Distribution is now via the repo-root `SKILL.md` being
-> indexed by third-party skill registries, not the old CLI path.
+> `ah skills publish` is **dead** (platform skills table removed 2026-04-13).
+> Distribution is now via the GitHub repo being installable by the
+> `vercel-labs/skills` CLI and surfacing on skills.sh.
 
-## What's already in the repo
+## How skills.sh actually works (verified 2026-05-18)
 
-- Root [`SKILL.md`](../../SKILL.md) — v1.0.0, MIT, trigger-rich description,
-  authoritative command surface, no stale commands.
-- README "🤖 Use with AI Agents" section with install commands + badge path.
+There is **no login, no submit form, no "Add skill" button**. Confirmed by
+reading https://skills.sh/docs directly:
 
-## Publish steps (owner action — needs the platform accounts)
+- skills.sh is a **leaderboard ranked by anonymous install telemetry** from the
+  `npx skills` CLI. A skill appears once people install it via the CLI.
+- Eligibility = a **public GitHub repo with a discoverable `SKILL.md`**. No
+  account is ever involved. The earlier "sign in with GitHub / Add skill"
+  plan was wrong — there is no such flow.
+- The page `https://skills.sh/<owner>/<repo>` and search populate only after
+  the leaderboard aggregates installs. One install will not show immediately
+  on a board with ~389K total installs — it needs real install volume.
 
-skills.sh and ClawHub index public GitHub repos that contain a root
-`SKILL.md`. The repo is now in that shape, so:
+## Done in-repo
 
-1. **skills.sh** — sign in with GitHub at https://skills.sh, "Add skill",
-   point it at `annals-ai/ah-cli`. It reads the root `SKILL.md` frontmatter.
-   The public URL becomes `https://skills.sh/annals-ai/ah-cli`.
-2. **ClawHub** — https://clawhub.ai, same flow; addressable as
-   `annals-ai/ah-cli` via `clawhub install annals-ai/ah-cli`.
-3. After both are live, replace the plain badge area in README with the real
-   install badges (copy gingiris's pattern):
+- ✅ Public skill at [`.agents/skills/ah-cli/SKILL.md`](../../.agents/skills/ah-cli/SKILL.md)
+  (v1.0.0, MIT, trigger-rich, authoritative command surface).
+- ✅ `npx skills add annals-ai/ah-cli` resolves and installs — telemetry fires.
+- ✅ README badge uses the documented format:
+  `[![skills.sh](https://skills.sh/b/annals-ai/ah-cli)](https://skills.sh/annals-ai/ah-cli)`
 
-   ```markdown
-   [![Install on skills.sh](https://img.shields.io/badge/Install-skills.sh-black?style=flat-square)](https://skills.sh/annals-ai/ah-cli)
-   [![Install on ClawHub](https://img.shields.io/badge/Install_on-ClawHub-blue?style=flat-square)](https://clawhub.ai/annals-ai/ah-cli)
-   ```
+### Important caveat: `.agents/skills/` shadows root SKILL.md
 
-4. Set the GitHub repo homepage to the skills.sh URL once live (gingiris does
-   this — it makes the marketplace page the canonical entry point):
+The `vercel-labs/skills` CLI installs every skill under `.agents/skills/*`,
+**not** a root `SKILL.md`, when both exist. So `npx skills add annals-ai/ah-cli`
+pulls all of: `ah-cli` (the public usage skill — good), plus the internal
+dev skills `ah-dev`, `ah-creator`, `ah-a2a`, `agents-hot-onboarding`.
 
-   ```bash
-   gh repo edit annals-ai/ah-cli --homepage https://skills.sh/annals-ai/ah-cli
-   ```
+Public installers therefore also get the internal dev tooling. Owner decision
+(not done autonomously — affects skill architecture):
+
+- Option A: accept it (dev skills are harmless, just noisy).
+- Option B: mark the internal ones private (frontmatter `private: true`) or
+  move them out of `.agents/skills/` so only `ah-cli` is publicly installable.
+  Recommended before the launch push so skills.sh shows one clean entry.
+
+## What actually drives skills.sh ranking
+
+Install volume via `npx skills add annals-ai/ah-cli`. It rises with the same
+launch motion as everything else — HN/Reddit/awesome-lists driving people to
+install. There is no shortcut and nothing more to "register".
+
+## Optional once it has volume
+
+- Set repo homepage to the skills.sh page (gingiris does this):
+  `gh repo edit annals-ai/ah-cli --homepage https://skills.sh/annals-ai/ah-cli`
+- ClawHub (clawhub.ai, reachable) is a separate registry — mechanism
+  unverified; revisit only if it proves to be a real traffic source.
 
 ## Keeping the skill fresh
 
-Bump `version:` in the root `SKILL.md` whenever the command surface changes,
-and keep the "no longer exists" list in sync with `CLAUDE.md`. Registries
-re-index on push.
+Bump `version:` in `.agents/skills/ah-cli/SKILL.md` when the command surface
+changes; keep the "no longer exists" list in sync with `CLAUDE.md`.
